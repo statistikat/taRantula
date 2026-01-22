@@ -1,4 +1,5 @@
 # taRantula
+[![check](https://github.com/statistikat/taRantula/actions/workflows/check.yaml/badge.svg)](https://github.com/statistikat/taRantula/actions/workflows/check.yaml)
 
 **taRantula** is an `R` package designed for robust, large-scale web scraping. It combines the flexibility of Selenium with the speed of `httr`, backed by a persistent DuckDB storage engine to ensure data integrity.
 
