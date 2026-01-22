@@ -27,7 +27,7 @@ The `params_manager` class follows a specific priority when loading settings:
 
 ## Using the Configuration for a scraping job
 
-The scraper configuration initialized using function `params_scraper()` manages settings for Selenium, robots.txt, and directory paths.
+The scraper configuration initialized using function `paramsScraper()` manages settings for Selenium, robots.txt, and directory paths.
 
 ### Initializing
 
@@ -37,10 +37,10 @@ You can initialize with defaults or override specific values immediately.
 library(taRantula)
 
 # Basic initialization
-cfg <- params_scraper(project = "census_scrape")
+cfg <- paramsScraper(project = "census_scrape")
 
 # Advanced initialization with nested Selenium settings
-cfg <- params_scraper(
+cfg <- paramsScraper(
   project = "census_scrape",
   selenium = list(host = "192.168.1.xx", workers = 5)
 )
@@ -64,11 +64,11 @@ cfg$set("robots$check", FALSE)
 
 ## Using the Configuration for a Google Custom Search
 
-The Google Search configuration which can be initialized with function `params_googlesearch` is more streamlined, focusing on API limits and result attributes.
+The Google Search configuration which can be initialized with function `paramsGoogleSearch` is more streamlined, focusing on API limits and result attributes.
 
 ```{r google-init}
 # Set up a Google Search task
-gcfg <- params_googlesearch(
+gcfg <- paramsGoogleSearch(
   path = "~/google_results",
   max_queries = 500,
   scrape_attributes = c("link", "snippet") # Only keep specific fields
@@ -98,7 +98,7 @@ cfg$write_defaults("template.yaml")
 
 ```{r import}
 # Recreate a scraper state from a YAML file
-new_cfg <- params_scraper(config_file = "my_config.yaml")
+new_cfg <- paramsScraper(config_file = "my_config.yaml")
 ```
 
 ------------------------------------------------------------------------

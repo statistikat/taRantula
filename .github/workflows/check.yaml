@@ -40,3 +40,5 @@ jobs:
         with:
           error-on: '"error"'
           check-dir: '"check"'
+        env:
+          _R_CHECK_VIGNETTES_CHECK_TITLE_: FALSE

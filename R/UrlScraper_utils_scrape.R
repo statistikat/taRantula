@@ -24,11 +24,11 @@
 #'   }
 #'
 #' @details
-#' The function first checks robots.txt rules using `check_robotsdata()`.  
-#' If scraping is disallowed, a standardized record is returned.  
+#' The function first checks robots.txt rules using `check_robotsdata()`.
+#' If scraping is disallowed, a standardized record is returned.
 #' When using Selenium, the browser is navigated to the URL and the potentially
 #' redirected final URL is captured. For non-Selenium inputs, an HTTP GET request
-#' is performed.  
+#' is performed.
 #' Errors during scraping are caught and converted into structured output.
 #'
 #'
@@ -84,7 +84,7 @@
         url_redirect <- NA_character_
       }
 
-      dt_links <- extract_links(
+      dt_links <- extractLinks(
         doc = html_source,
         baseurl = url
       )
@@ -142,8 +142,8 @@
 #' @details
 #' The function iterates over provided URLs, invoking `.scrape_single_url()` for each.
 #' Progress is logged to file, and optional snapshot files store intermediate results to
-#' safeguard against worker interruptions.  
-#' When the stop file is detected, the worker terminates early.  
+#' safeguard against worker interruptions.
+#' When the stop file is detected, the worker terminates early.
 #' Any remaining un-snapshotted results are written at the end of execution.
 #'
 #' @examples

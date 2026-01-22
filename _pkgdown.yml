@@ -1,0 +1,47 @@
+url: https://statistikat.github.io/taRantula/
+template:
+  bootstrap: 5
+  bootswatch: flatly
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, news]
+    right: [github]
+  components:
+    intro:
+      text: Get Started
+      href: articles/Intro.html
+
+# Organize the Reference Page
+reference:
+  - title: "Scraping"
+    desc: "The main engines for web data extraction."
+    contents:
+      - paramsScraper
+      - UrlScraper
+      - extractLinks
+
+  - title: "Searching"
+    desc: "Defining parameters for Scraping/Search Jobs"
+    contents:
+      - paramsGoogleSearch
+      - buildQuery
+      - runGoogleSearch
+      - searchURL
+      - getGoogleCreds
+
+
+# Configure Articles (Vignettes)
+articles:
+  - title: "User Guides"
+    contents:
+      - Intro
+      - Config
+
+footer:
+  structure:
+    left:  my_authors
+    right: my_built_with
+  components:
+    my_authors: "Developed by Statistics Austria"
+    my_built_with: "Built with [pkgdown](https://pkgdown.r-lib.org/)."

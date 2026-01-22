@@ -1,6 +1,6 @@
 test_that("cfg_scraper R6 configuration and validation works", {
   # Initialization and Defaults
-  cfg <- params_scraper()
+  cfg <- paramsScraper()
   expect_true(inherits(cfg, "cfg_scraper"))
 
   expect_equal(cfg$get("project"), "my-project")
@@ -57,7 +57,7 @@ test_that("cfg_googlesearch specific validation works", {
   Sys.setenv("SCRAPING_APIKEY_GOOGLE" = "mygoogleAPIKey")
   Sys.setenv("SCRAPING_ENGINE_GOOGLE" = "mysearchEngineID")
 
-  gcfg <- params_googlesearch(path = tempdir())
+  gcfg <- paramsGoogleSearch(path = tempdir())
 
   expect_equal(gcfg$get("max_queries"), 10000L)
 
@@ -75,7 +75,7 @@ test_that("YAML export and round-trip loading works", {
   yaml_path <- file.path(td, "test_config.yaml")
 
   # 1. Setup a config with non-default nested values
-  cfg <- params_scraper(base_dir = td)
+  cfg <- paramsScraper(base_dir = td)
   cfg$set("selenium$port", 5555L)
   cfg$set("selenium$ecaps$args", c("--headless", "--no-sandbox", "--custom-flag"))
 
@@ -85,7 +85,7 @@ test_that("YAML export and round-trip loading works", {
 
   # 3. Load into a new object and verify
   # Pass the file to initialize via the config_file argument
-  cfg_new <- params_scraper(config_file = yaml_path, base_dir = td)
+  cfg_new <- paramsScraper(config_file = yaml_path, base_dir = td)
 
   expect_equal(cfg_new$get("selenium$port"), 5555L)
   expect_contains(cfg_new$get("selenium$ecaps$args"), "--custom-flag")
@@ -98,7 +98,7 @@ test_that("YAML export and round-trip loading works", {
 })
 
 test_that("Complex nested list validation works", {
-  cfg <- params_scraper()
+  cfg <- paramsScraper()
 
   # Test that providing a partial list to a top-level key works
   # because your .validate uses modifyList with defaults
@@ -116,7 +116,7 @@ test_that("Complex nested list validation works", {
 })
 
 test_that("Path splitting and validation works", {
-  cfg <- params_scraper()
+  cfg <- paramsScraper()
 
   # Test $ syntax
   cfg$set("selenium$host", "test-host")

@@ -8,7 +8,7 @@
 #' @details
 #' To use this function, you must provide a valid Google Custom Search API key
 #' via the environment variable `SCRAPING_APIKEY_GOOGLE`, for example by adding
-#' it to your `~/.Renviron` file.  
+#' it to your `~/.Renviron` file.
 #' In addition, the Custom Search Engine (CSE) identifier must be available via
 #' the environment variable `SCRAPING_ENGINE_GOOGLE`.
 #'
@@ -24,9 +24,9 @@
 #'
 #' @return
 #' A `data.table` containing the following columns:
-#' * `idcol` – Identifier for the business  
-#' * `attributes` – Fields extracted from Google results (e.g., link, title)  
-#' * `position` – Search result ranking position  
+#' * `idcol` – Identifier for the business
+#' * `attributes` – Fields extracted from Google results (e.g., link, title)
+#' * `position` – Search result ranking position
 #'
 #' @export
 #'
@@ -291,7 +291,7 @@ buildQuery <- function(dat, selectCols = NULL) {
 #'   `cfg$query_col`. All referenced columns must exist in `dat`.
 #'
 #' @returns
-#' Returns `TRUE` invisibly when all queries have completed successfully.  
+#' Returns `TRUE` invisibly when all queries have completed successfully.
 #' Result files are written to the directory specified in `cfg`.
 #'
 #' @export
@@ -360,21 +360,21 @@ runGoogleSearch <- function(cfg = cfg_googlesearch$new(), dat) {
 #' @title Retrieve Google Search Credentials
 #'
 #' @description
-#' Reads Google Custom Search API credentials from environment variables.  
+#' Reads Google Custom Search API credentials from environment variables.
 #' This allows secure decoupling of API keys from code.
 #'
 #' @details
 #' The following environment variables must be defined:
-#' * `SCRAPING_APIKEY_GOOGLE` – Your Google Custom Search API key  
-#' * `SCRAPING_ENGINE_GOOGLE` – The Custom Search Engine (CSE) identifier  
+#' * `SCRAPING_APIKEY_GOOGLE` – Your Google Custom Search API key
+#' * `SCRAPING_ENGINE_GOOGLE` – The Custom Search Engine (CSE) identifier
 #'
 #' These values can be defined inside `~/.Renviron` or set at runtime using
 #' `Sys.setenv()`.
 #'
 #' @return
 #' A named list with elements:
-#' * `engine` – The Google Custom Search Engine ID  
-#' * `key` – The API key string  
+#' * `engine` – The Google Custom Search Engine ID
+#' * `key` – The API key string
 #'
 #' @export
 #'
@@ -382,9 +382,9 @@ runGoogleSearch <- function(cfg = cfg_googlesearch$new(), dat) {
 #' ## Example:
 #' Sys.setenv(SCRAPING_APIKEY_GOOGLE = "your_key")
 #' Sys.setenv(SCRAPING_ENGINE_GOOGLE = "your_engine")
-#' creds <- get_google_creds()
+#' creds <- getGoogleCreds()
 #' print(creds)
-get_google_creds <- function() {
+getGoogleCreds <- function() {
   envname <- "SCRAPING_APIKEY_GOOGLE"
   key <- Sys.getenv(envname, unset = NA)
   if (is.na(key)) {

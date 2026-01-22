@@ -68,8 +68,8 @@ networks:
 
 The package contains the following processes: 
     
-    - define google custom search parameters via an `R6`-based configuration and run a google custom search.
-    - define scraping parameters via an `R6`-based configuration and initializing the scraper.
+- define google custom search parameters via an `R6`-based configuration and run a google custom search.
+- define scraping parameters via an `R6`-based configuration and initializing the scraper.
     
 
 ## Google custom search    
@@ -81,7 +81,7 @@ Set the following environmental variables:
   - `SCRAPING_APIKEY_GOOGLE` for the google custom search api key
   - `SCRAPING_ENGINE_GOOGLE` for the google custom search engine ID
 
-Use `params_googlesearch()` to manage settings. This ensures all nested parameters are validated before the google custom search starts.
+Use `paramsGoogleSearch()` to manage settings. This ensures all nested parameters are validated before the google custom search starts.
 
 ### Custom search
 
@@ -89,11 +89,11 @@ Run google custom search api with a queries build from enterprise name and addre
 
 ```{r}
 Sys.setenv(
-  SCRAPING_APIKEY_GOOGLE = "blablabla",
+  SCRAPING_APIKEY_GOOGLE = "My_ApiKey",
   SCRAPING_ENGINE_GOOGLE = "My_Engine"
 )
 
-cfg <- params_googlesearch(
+cfg <- paramsGoogleSearch(
   path = "~/path/to/my/project",
   scrape_attributes = c("title", "link", "displayLink", "snippet")
 )
@@ -130,13 +130,13 @@ runGoogleSearch(
 
 ### Configuration 
 
-Use `params_scraper()` to manage settings. This ensures all nested parameters are validated before the scraper starts. The `UrlScraper` class manages the state, connection to the `DuckDB` database, and the parallel worker pool.
+Use `paramsScraper()` to manage settings. This ensures all nested parameters are validated before the scraper starts. The `UrlScraper` class manages the state, connection to the `DuckDB` database, and the parallel worker pool.
 
 ```{r setup-config}
 library(taRantula)
 
 # Initialize scraping parameters
-cfg <- params_scraper()
+cfg <- paramsScraper()
 cfg$set("selenium$host", "localhost")
 cfg$set("selenium$workers", 3)
 cfg$set("urls", c("https://nytimes.com", "https://whitehouse.gov"))
