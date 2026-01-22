@@ -24,9 +24,17 @@ jobs:
         with:
           use-public-rspm: true
 
-      - uses: r-lib/actions/setup-r-dependencies@v2
+      - name: Install dependencies
+        uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::pkgdown, local::.
+          extra-packages: |
+            any::pkgdown
+            any::roxygen2
+          needs: website
+
+      - name: Document package
+        run: roxygen2::roxygenize()
+        shell: Rscript {0}
 
       - name: Build and Deploy Site
         run: |
