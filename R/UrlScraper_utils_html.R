@@ -2,22 +2,22 @@
 #'
 #' @description
 #' Extracts all valid hyperlinks from an HTML document and returns them as a
-#' cleaned and normalized `data.table`.  
+#' cleaned and normalized `data.table`.
 #' The function parses `<a>`, `<area>`, `<base>`, and `<link>` elements,
 #' resolves relative URLs, removes invalid or unwanted links, and enriches the
 #' output with metadata such as the source URL, extraction level, and timestamp.
 #'
 #' @details
 #' This extractor is designed for web‑scraping pipelines where only meaningful,
-#' navigable hyperlinks are desired.  
+#' navigable hyperlinks are desired.
 #' The function:
 #'
-#' * Converts inputs to an XML document when necessary  
-#' * Extracts link text and normalizes whitespace  
-#' * Resolves relative URLs against the provided `baseurl`  
-#' * Forces all URLs to use `https://`  
-#' * Removes invalid links using [`check_links()`]  
-#' * Ensures uniqueness of extracted links  
+#' * Converts inputs to an XML document when necessary
+#' * Extracts link text and normalizes whitespace
+#' * Resolves relative URLs against the provided `baseurl`
+#' * Forces all URLs to use `https://`
+#' * Removes invalid links using [`check_links()`]
+#' * Ensures uniqueness of extracted links
 #'
 #' @param doc A character string containing HTML or an `xml_document` object.
 #' @param baseurl Character string representing the URL from which the document
@@ -25,11 +25,11 @@
 #'
 #' @return
 #' A `data.table` containing the following columns:
-#' * `href` – Cleaned and validated absolute URLs  
-#' * `label` – Link text extracted from the anchor element  
-#' * `source_url` – The originating page from which links were extracted  
-#' * `level` – Extraction depth (always 0 for this function)  
-#' * `scraped_at` – Timestamp of extraction  
+#' * `href` – Cleaned and validated absolute URLs
+#' * `label` – Link text extracted from the anchor element
+#' * `source_url` – The originating page from which links were extracted
+#' * `level` – Extraction depth (always 0 for this function)
+#' * `scraped_at` – Timestamp of extraction
 #'
 #' Duplicate URLs are automatically removed.
 #'
@@ -37,8 +37,8 @@
 #'
 #' @examples
 #' html <- "<html><body><a href='/about'>About</a></body></html>"
-#' extract_links(html, baseurl = "https://example.com")
-extract_links <- function(doc, baseurl) {
+#' extractLinks(html, baseurl = "https://example.com")
+extractLinks <- function(doc, baseurl) {
   href <- NULL
   if (!inherits(doc, "xml_document")) {
     doc <- rvest::read_html(doc)
@@ -91,13 +91,13 @@ extract_links <- function(doc, baseurl) {
 #'
 #' @description
 #' Evaluates extracted URLs and determines which of them should be retained
-#' for further processing.  
+#' for further processing.
 #' The function filters out links that:
 #'
-#' * Do not belong to the same domain as `baseurl`  
-#' * Point to files such as images, audio, video, archives, executables, etc.  
-#' * Refer to fragments or anchor points  
-#' * Refer back to the same path as the main page  
+#' * Do not belong to the same domain as `baseurl`
+#' * Point to files such as images, audio, video, archives, executables, etc.
+#' * Refer to fragments or anchor points
+#' * Refer back to the same path as the main page
 #'
 #' @param hrefs Character vector of URLs to check.
 #' @param baseurl Character string giving the original page URL for domain and
@@ -190,7 +190,7 @@ check_links <- function(hrefs, baseurl) {
 #'
 #' @description
 #' Extracts the domain portion of URLs and optionally includes the scheme
-#' (`http://` or `https://`).  
+#' (`http://` or `https://`).
 #' The function removes common subdomains such as `www.` for consistency.
 #'
 #' @param x Character vector of URLs.
@@ -226,16 +226,16 @@ get_domain <- function(x, include_scheme = FALSE) {
 #'
 #' @description
 #' Converts an HTML document into a cleaned representation where scripts,
-#' styles, and similar elements are removed.  
+#' styles, and similar elements are removed.
 #' If `keep_only_text = TRUE`, the function returns only the visible text of
 #' the page.
 #'
 #' @details
 #' This helper is used to prepare HTML content for downstream text extraction.
 #' It:
-#' * Removes `<script>`, `<style>`, and `<noscript>` nodes  
-#' * Optionally extracts only visible text  
-#' * Supports both raw HTML input and already parsed XML documents  
+#' * Removes `<script>`, `<style>`, and `<noscript>` nodes
+#' * Optionally extracts only visible text
+#' * Supports both raw HTML input and already parsed XML documents
 #'
 #' @param doc Either HTML content as a character string or an
 #'   `xml_document`. `NA` inputs are returned unchanged.
@@ -291,37 +291,37 @@ parse_HTML <- function(doc, keep_only_text = FALSE) {
 #'
 #' @description
 #' Applies a regular expression to previously scraped HTML documents, optionally
-#' restricted to a specific capture group.  
+#' restricted to a specific capture group.
 #' Each document is first cleaned using [`parse_HTML()`] to remove non‑text
 #' content, ensuring reliable pattern extraction.
 #'
 #' @details
 #' The function:
 #'
-#' * Cleans and normalizes each HTML document  
-#' * Converts text to lowercase when `ignore_cases = TRUE`  
-#' * Extracts all regex matches using `stringr::str_match_all()`  
-#' * Supports named or numbered capture groups  
-#' * Returns a unified `data.table` indexed by URL  
+#' * Cleans and normalizes each HTML document
+#' * Converts text to lowercase when `ignore_cases = TRUE`
+#' * Extracts all regex matches using `stringr::str_match_all()`
+#' * Supports named or numbered capture groups
+#' * Returns a unified `data.table` indexed by URL
 #'
 #' Named groups allow meaningful column labeling in the result.
 #'
 #' @param docs Character vector or list of HTML source documents.
-#' @param urls Character vector of URLs corresponding to `docs`.  
+#' @param urls Character vector of URLs corresponding to `docs`.
 #' @param pattern A regular expression to search for.
-#' @param group Optional capture group name or index to extract.  
+#' @param group Optional capture group name or index to extract.
 #'   If `NULL`, the full match is returned.
 #' @param ignore_cases Logical; if `TRUE`, performs case‑insensitive matching.
 #'
 #' @return
 #' A `data.table` where each row corresponds to a match and includes:
-#' * `url` – The originating document URL  
-#' * `pattern` (or the given group name) – Extracted values  
+#' * `url` – The originating document URL
+#' * `pattern` (or the given group name) – Extracted values
 #'
 #' Missing matches are returned as `NA_character_`.
 #'
 #' @keywords internal
-#' 
+#'
 #' @examples
 #' \dontrun{
 #' ## Extract email-like patterns:

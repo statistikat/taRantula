@@ -423,7 +423,7 @@ params_manager <- R6::R6Class(
 #' @docType class
 #' @keywords internal
 #' @format An `R6::R6Class` generator object.
-#' @rdname params_googlesearch
+#' @rdname paramsGoogleSearch
 #' @export
 cfg_googlesearch <- R6::R6Class(
   classname = "cfg_googlesearch",
@@ -465,7 +465,7 @@ cfg_googlesearch <- R6::R6Class(
     #'   * `credentials`: A named list containing Google API credentials. Use
     #'     `"key"` or `"SCRAPING_APIKEY_GOOGLE"` for the API Key, and `"engine"`
     #'     or `"SCRAPING_ENGINE_GOOGLE"` for the Search Engine ID. If omitted,
-    #'     environment variables are used. See also [get_google_creds()].
+    #'     environment variables are used. See also [getGoogleCreds()].
     #'
     #' @param path Path to the directory where project data are stored.
     #'   Overrides the `path` setting in `config_file`.
@@ -537,7 +537,7 @@ cfg_googlesearch <- R6::R6Class(
         max_query_rate = 100,
         file = NULL,
         overwrite = FALSE,
-        credentials = get_google_creds()
+        credentials = getGoogleCreds()
       )
     }
   ),
@@ -597,15 +597,15 @@ cfg_googlesearch <- R6::R6Class(
 #'
 #' @return A `cfg_googlesearch` object.
 #' @export
-#' @rdname params_googlesearch
+#' @rdname paramsGoogleSearch
 #' @examples
 #' # Create with defaults
 #' # in this case, Environment-Variables `SCRAPING_APIKEY_GOOGLE` and `SCRAPING_ENGINE_GOOGLE`
 #' # need to be set beforehand
-#' cfg <- params_googlesearch()
+#' cfg <- paramsGoogleSearch()
 #'
 #' # Create with overrides
-#' cfg <- params_googlesearch(
+#' cfg <- paramsGoogleSearch(
 #'   path = getwd(),
 #'   credentials = list(
 #'     key = "my_google_apikey",
@@ -622,7 +622,7 @@ cfg_googlesearch <- R6::R6Class(
 #' cfg$export(f)
 #'
 #' # Load from exported config-file and override
-#' cfg <- params_googlesearch(config_file = f, verbose = TRUE)
+#' cfg <- paramsGoogleSearch(config_file = f, verbose = TRUE)
 #' try(file.remove(f))
 #'
 #' # Return the current configuration
@@ -634,7 +634,7 @@ cfg_googlesearch <- R6::R6Class(
 #' # Update the configuration
 #' cfg$set("max_query_rate", 200)
 #' cfg$get("max_query_rate")
-params_googlesearch <- function(config_file = NULL, path = tempdir(), ...) {
+paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
   cfg_googlesearch$new(config_file = config_file, path = path, ...)
 }
 
@@ -670,7 +670,7 @@ params_googlesearch <- function(config_file = NULL, path = tempdir(), ...) {
 #' @docType class
 #' @keywords internal
 #' @format An `R6::R6Class` generator object.
-#' @rdname params_scraper
+#' @rdname paramsScraper
 #' @export
 cfg_scraper <- R6::R6Class(
   classname = "cfg_scraper",
@@ -933,21 +933,21 @@ cfg_scraper <- R6::R6Class(
 #' @return A [`cfg_scraper`] object.
 #'
 #' @export
-#' @rdname params_scraper
+#' @rdname paramsScraper
 #'
 #' @examples
 #' # Create with defaults
-#' cfg <- params_scraper()
+#' cfg <- paramsScraper()
 #'
 #' # Create with overrides
-#' cfg <- params_scraper(base_dir = tempdir(), project = "my-project")
+#' cfg <- paramsScraper(base_dir = tempdir(), project = "my-project")
 #'
 #' # Write current configuration to file
 #' f <- tempfile(fileext = ".yaml")
 #' cfg$export(f)
 #'
 #' # Load from exported config-file and override
-#' cfg <- params_scraper(config_file = f, project = "some-other-proj")
+#' cfg <- paramsScraper(config_file = f, project = "some-other-proj")
 #' try(file.remove(f))
 #'
 #' # Return the current configuration
@@ -961,6 +961,6 @@ cfg_scraper <- R6::R6Class(
 #' # Update the configuration
 #' cfg$set(c("selenium", "port"), 4445)
 #' cfg$set("selenium$host", "127.0.0.1")
-params_scraper <- function(config_file = NULL, base_dir = getwd(), ...) {
+paramsScraper <- function(config_file = NULL, base_dir = getwd(), ...) {
   cfg_scraper$new(config_file = config_file, base_dir = base_dir, ...)
 }

@@ -18,8 +18,8 @@
 
 The package uses a robust, `R6`-based configuration system with strict type validation:
 
-* **`params_scraper()`**: General web crawling and JS rendering settings.
-* **`params_googlesearch()`**: Specialized config for Google Search API and rate-limit handling.
+* **`paramsScraper()`**: General web crawling and JS rendering settings.
+* **`paramsGoogleSearch()`**: Specialized config for Google Search API and rate-limit handling.
 * **YAML Support**: Easily export or import configurations for reproducible scraping pipelines.
 
 ## Compliance and Safety
@@ -41,13 +41,13 @@ remotes::install_github("statistikat/taRantula")
 
 Below is a basic example of how to initialize a scraping job using the Selenium engine and DuckDB storage. 
 
-For advanced users looking to run this in a containerized environment, please refer to the **[Intro Vignette: Docker-based Selenium Setup](vignettes/Intro.Rmd)**.
+For advanced users looking to run this in a containerized environment, please refer to the **[Intro Vignette: Docker-based Selenium Setup](https://statistikat.github.io/taRantula/articles/Intro.html)**.
 
 ```r
 library(taRantula)
 
 # 1. Setup Configuration
-cfg <- params_scraper()
+cfg <- paramsScraper()
 cfg$set("selenium$host", "localhost")
 cfg$set("selenium$port", 4444L)
 cfg$set("storage$path", "scraping_results.duckdb")

@@ -20,7 +20,7 @@
 #' * Regex‑based extraction of text from previously scraped HTML
 #'
 #' @section Configuration:
-#' A configuration object (typically created via `params_scraper()`) is
+#' A configuration object (typically created via [paramsScraper]) is
 #' expected to contain at least the following entries:
 #'
 #' * `db_file` – path to the DuckDB database file
@@ -41,7 +41,7 @@
 #'   - `robots_user_agent` – user agent string used for robots queries
 #' * `exclude_social_links` – logical, whether to exclude social media links
 #'
-#' The exact structure depends on `params_scraper()` and related helpers.
+#' The exact structure depends on [paramsScraper] and related helpers.
 #'
 #' @section Methods:
 #' * `initialize(config)` – create a new `UrlScraper` instance
@@ -64,7 +64,7 @@
 #' @examples
 #' \dontrun{
 #' # Create a default configuration object
-#' cfg <- params_scraper()
+#' cfg <- paramsScraper()
 #'
 #' # Example Selenium settings
 #' cfg$set("selenium$host", "localhost")
@@ -115,7 +115,7 @@ UrlScraper <- R6::R6Class(
     #' if present, and configures progress handlers.
     #'
     #' @param config A list (or configuration object) of settings, typically
-    #'   created by `params_scraper()`. It should include:
+    #'   created by [paramsScraper()]. It should include:
     #'   * `db_file` – path to the DuckDB database file.
     #'   * `snapshot_dir` – directory for snapshot files.
     #'   * `progress_dir` – directory for progress/log files.
@@ -320,7 +320,7 @@ UrlScraper <- R6::R6Class(
             ".write_snapshot",
             ".worker_scrape",
             ".scrape_single_url",
-            "extract_links",
+            "extractLinks",
             "check_links",
             "check_robotsdata",
             "query_robotsdata",
