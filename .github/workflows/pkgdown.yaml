@@ -36,6 +36,9 @@ jobs:
         run: roxygen2::roxygenize()
         shell: Rscript {0}
 
+      - name: Install taRantula
+        run: Rscript -e 'install.packages(".", repos = NULL, type = "source")'
+
       - name: Build and Deploy Site
         run: |
           git config --local user.name "$GITHUB_ACTOR"
