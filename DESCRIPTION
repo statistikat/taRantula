@@ -1,0 +1,49 @@
+Package: taRantula
+Title: The taRantula package provides methods and utility-functions to scrape web pages
+Version: 0.1.0
+Date: 2026-01-22
+Authors@R: c(person("Johannes", "Gussenbauer", role = c("aut", "cre"),
+                     email = "Johannes.Gussenbauer@statistik.gv.at"),
+              person("Bernhard", "Meindl", role = "aut",
+                     email = "Bernhard.Meindl@statistik.gv.at"))
+Description: The taRantula Package provides functions to scrape web pages. A
+  lot of options can be set.
+Encoding: UTF-8
+LazyData: true
+License: GPL (>= 2)
+Imports: 
+    data.table,
+    stringr,
+    jsonlite,
+    rvest,
+    urltools,
+    xml2,
+    httr,
+    rlang,
+    methods,
+    R6,
+    utils,
+    duckdb,
+    DBI,
+    fs,
+    future,
+    future.apply,
+    cli,
+    progressr,
+    selenium,
+    glue,
+    robotstxt
+RoxygenNote: 7.3.3
+Suggests: 
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    plotly,
+    ggplot2,
+    pROC,
+    ranger,
+    yaml,
+    devtools
+Roxygen: list(markdown = TRUE)
+VignetteBuilder: knitr
+Config/testthat/edition: 3

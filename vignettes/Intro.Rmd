@@ -1,0 +1,252 @@
+---
+title: "Getting Started with taRantula"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{intro}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+The `taRantula` package provides a production-grade framework for high-volume statistical web scraping. It focuses on **persistence**, **parallelism**, and **compliance**.
+
+## Prerequisites: Selenium Grid
+
+Before scraping, you need a running Selenium Grid. Using Docker is the recommended and easisest way to manage browser overhead outside of `R`.
+
+### Docker-Compose Setup
+
+Save the following as `docker-compose.yaml` and run `docker-compose up -d`. This configuration is optimized for the memory demands of modern browsers.
+
+``` yaml
+version: "3"
+services:
+  hub:
+  container_name: selenium-hub
+image: selenium/hub:4.8
+ports:
+  - 4442-4444:4442-4444
+networks:
+  - net-selenium-grid
+environment:
+  - NODE_MAX_INSTANCES=3
+  - NODE_MAX_SESSION=3
+
+node-chrome:
+  image: selenium/node-chrome:138.0
+  container_name: selenium-grid-chrome
+  depends_on:
+    - hub
+  networks:
+    - net-selenium-grid
+  environment:
+    - SE_EVENT_BUS_HOST=hub
+    - SE_EVENT_BUS_PUBLISH_PORT=4442
+    - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+    - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+    - SE_NODE_MAX_SESSIONS=3
+    - SE_ENABLE_BROWSER_LEFTOVERS_CLEANUP=true
+    - SE_BROWSER_LEFTOVERS_INTERVAL_SECS=600
+    - SE_BROWSER_LEFTOVERS_TEMPFILES_DAYS=2
+  shm_size: 2g
+
+networks:
+  net-selenium-grid:
+  external: true
+```
+
+***Note**:* Create the network first if needed: This can be achieved using command `docker network create net-selenium-grid`.
+
+## Basic Workflow
+
+The package contains the following processes: 
+    
+    - define google custom search parameters via an `R6`-based configuration and run a google custom search.
+    - define scraping parameters via an `R6`-based configuration and initializing the scraper.
+    
+
+## Google custom search    
+
+### Configuration 
+
+Set the following environmental variables:
+
+  - `SCRAPING_APIKEY_GOOGLE` for the google custom search api key
+  - `SCRAPING_ENGINE_GOOGLE` for the google custom search engine ID
+
+Use `params_googlesearch()` to manage settings. This ensures all nested parameters are validated before the google custom search starts.
+
+### Custom search
+
+Run google custom search api with a queries build from enterprise name and addresses.
+
+```{r}
+Sys.setenv(
+  SCRAPING_APIKEY_GOOGLE = "blablabla",
+  SCRAPING_ENGINE_GOOGLE = "My_Engine"
+)
+
+cfg <- params_googlesearch(
+  path = "~/path/to/my/project",
+  scrape_attributes = c("title", "link", "displayLink", "snippet")
+)
+
+dat <- data.table(
+  ID = c(1, 2, 3),
+  EnterpriseName = c("Name1", "Name2", "Name3"),
+  EnterpriseAddress = c("Address1", "Address2", "Address3")
+)
+
+# build queries
+dat[, Query1 := buildQuery(.SD), .SDcols = c(
+  "EnterpriseName",
+  "EnterpriseAddress"
+)]
+dat[, Query2 := buildQuery(.SD), .SDcols = c("EnterpriseAddress")]
+
+# update keys in config
+cfg$set(key = "query_col", c("Query1", "Query2"))
+cfg$set(key = "file", c("File1.csv", "File2.csv")) # <- files to save results in
+
+# run google custom search
+runGoogleSearch(
+  cfg = cfg,
+  data = data
+)
+```
+
+
+
+
+    
+## Scraping
+
+### Configuration 
+
+Use `params_scraper()` to manage settings. This ensures all nested parameters are validated before the scraper starts. The `UrlScraper` class manages the state, connection to the `DuckDB` database, and the parallel worker pool.
+
+```{r setup-config}
+library(taRantula)
+
+# Initialize scraping parameters
+cfg <- params_scraper()
+cfg$set("selenium$host", "localhost")
+cfg$set("selenium$workers", 3)
+cfg$set("urls", c("https://nytimes.com", "https://whitehouse.gov"))
+
+# Initialize the scraper
+s <- UrlScraper$new(cfg)
+
+# Start scraping
+s$scrape()
+```
+
+### Scraping Engines: Selenium vs. httr
+
+The `scrape()` implementation is engine-agnostic. It detects whether the session is a full browser or a set of HTTP headers and adjusts its strategy accordingly.
+
+#### Selenium Mode (JavaScript Support)
+By default, the scraper expects a **Selenium Grid** to work with. This is necessary for modern websites that require JavaScript to render content.
+
+* **Redirect Detection**: The scraper automatically detects if a URL redirects (e.g., from `http` to `https`) and stores the `url_redirect` pointer in the database.
+* **Content Persistence**: The full rendered HTML source is captured after the DOM has stabilized.
+
+#### httr Fallback (High Speed)
+If you disable Selenium, the scraper falls back to `httr::GET()`. This is significantly faster and uses fewer resources but does not allow to catch dynamically rendered content.
+
+* **When to use**: For static sites or APIs where JavaScript rendering is not required.
+* **Custom Headers**: In this mode, the scraper passes your configured user-agent and metadata via HTTP headers.
+
+```{r engine-toggle}
+# To disable Selenium and use the httr fallback:
+cfg$set("selenium$use_selenium", FALSE)
+
+# The same UrlScraper$new(cfg) will now use httr internally
+```
+
+
+### Fault Tolerance and Progress Protection
+
+One of the core strengths of `taRantula` is its resilience. Scraping thousands of URLs is prone to interruptions (network timeouts, hardware crashes, or OS updates).
+
+#### Snapshotting Mechanism
+
+The configuration includes a `snapshot_every` parameter (default is 10).
+
+**How it works:** Every N URLs, each worker writes its current progress to a temporary "snapshot" file in the project directory.
+
+**Crash Recovery:** If the R session or the Selenium server crashes, simply re-initialize the `UrlScraper` with the same configuration. On startup, the class detects these snapshots and the existing DuckDB database.
+
+**Persistence:** Only the URLs processed since the *last* snapshot are lost, ensuring that 99% of your progress is usually preserved.
+
+### Data Extraction and Iteration
+
+Data is persisted in `DuckDB`, meaning you can access it via helper methods or raw SQL.
+
+```{r extraction}
+# Access results as a data.table
+results_dt <- s$results()
+
+# Access all discovered links
+links_dt <- s$links()
+
+# Inspect logs for errors or redirects
+logs_dt <- s$logs()
+```
+
+#### Advanced Extraction: Regex
+
+You can also perform targeted data mining across your results. For example, to find an Austrian UID (VAT number) only on pages that are likely to be "Imprints":
+
+```{r regex-example}
+# Pattern for Austrian VAT numbers
+uid_pattern <- "ATU[0-9]{8}"
+
+# Extract only from pages where the URL or the link label matches 'imprint'
+vat_results <- s$regex_extract(
+  pattern = uid_pattern,
+  filter_links = "imprint",
+  ignore_cases = TRUE
+)
+```
+
+### Controlling the Scraper
+
+#### Adding New URLs
+
+You can feed newly discovered links back into the scraper. `taRantula` automatically handles duplicate detection.
+
+```{r update}
+# Add new URLs and scrape again
+s$update_urls(urls = c("https://google.com", "https://www.statistik.at"))
+s$scrape()
+```
+
+#### Graceful Termination
+
+If you need to stop a long-running scrape, use `$stop()`. This creates a signal file that tells workers to finish their current URL and exit cleanly.
+
+```{r stop}
+s$stop()
+```
+
+#### Cleanup
+
+Always close the scraper to shut down the `DuckDB` connection and clean up temporary files.
+
+```{r close}
+s$close()
+```
+
+## Resources
+
+-   [Google Custom Search API](https://developers.google.com/custom-search/v1/overview)
+-   [Docker Engine Installation](https://docs.docker.com/engine/install/)
+-   [Selenium Grid Documentation](https://www.selenium.dev/documentation/grid/)
