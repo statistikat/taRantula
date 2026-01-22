@@ -59,7 +59,7 @@ urls <- c("[https://example.com](https://example.com)", "[https://r-project.org]
 scraper$run(urls)
 
 # 4. Extract Data (e.g., Email addresses)
-emails <- scraper$regex_extract(pattern = "email")
+emails <- scraper$regex_extract(pattern = "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+")
 
 # 5. Graceful Stop
 scraper$stop()
