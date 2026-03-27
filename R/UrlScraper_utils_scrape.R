@@ -196,6 +196,7 @@
         ),
         timeout = 60
       )
+    on.exit(sid$close())
   }else{
     sid <- c(user_agent = config$httr$user_agent)
   }
@@ -224,7 +225,7 @@
     retries <- 0
     while(is.na(rec$src) & config$selenium$use_selenium == TRUE & retries < 3){
       
-      tryCatch(sid$close())
+      tryCatch(sid$close(timeout = 300))
       sid <- 
         selenium::SeleniumSession$new(
           port = config$selenium$port,
@@ -236,8 +237,9 @@
             prefs = as.list(config$selenium$ecaps$prefs),
             excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
           ),
-          timeout = 60
+          timeout = 600
         )
+      on.exit(sid$close())
       
       # retry scraping with 
       rec <- .scrape_single_url(
@@ -253,7 +255,7 @@
     # if all re-tries were unsuccseful
     # reopen selenium and continue
     if(is.na(rec$src)){
-      tryCatch(sid$close())
+      tryCatch(sid$close(timeout = 300))
       sid <- 
         selenium::SeleniumSession$new(
           port = config$selenium$port,
@@ -265,8 +267,9 @@
             prefs = as.list(config$selenium$ecaps$prefs),
             excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
           ),
-          timeout = 60
+          timeout = 600
         )
+      on.exit(sid$close())
     }
     
     if (is.null(out)) {
