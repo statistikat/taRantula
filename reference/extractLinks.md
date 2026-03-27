@@ -67,5 +67,5 @@ extractLinks(html, baseurl = "https://example.com")
 #> 1: https://example.com/about  About https://example.com     0
 #>             scraped_at
 #>                 <POSc>
-#> 1: 2026-03-27 06:27:02
+#> 1: 2026-03-27 08:48:22
 ```
