@@ -7,7 +7,12 @@ creation, robots.txt validation, and stopping conditions.
 ## Usage
 
 ``` r
-.worker_scrape(inputs, sid)
+.worker_scrape(
+  urls,
+  chunk_id = 1,
+  p = function(amount, message) cat(amount, message, "\n"),
+  config
+)
 ```
 
 ## Arguments

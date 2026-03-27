@@ -145,12 +145,12 @@ The load precedence is:
 
   - `file`: Filename (relative to `path`) for saving results. If `NULL`,
     results are not written to disk. Uses
-    [`data.table::fwrite()`](https://rdatatable.gitlab.io/data.table/reference/fwrite.html)
+    [`data.table::fwrite()`](https://rdrr.io/pkg/data.table/man/fwrite.html)
     internally.
 
   - `overwrite`: Logical. If `TRUE`, existing files are overwritten. If
     `FALSE`, existing data are loaded via
-    [`data.table::fread()`](https://rdatatable.gitlab.io/data.table/reference/fread.html)
+    [`data.table::fread()`](https://rdrr.io/pkg/data.table/man/fread.html)
     and new results are appended. Ensure column names match when
     appending (default: `FALSE`).
 
@@ -252,7 +252,7 @@ cfg <- paramsGoogleSearch(
 # Return the current configuration
 cfg$show_config()
 #> $path
-#> [1] "/tmp/RtmppVykHU/file1b7447f41c24/reference"
+#> [1] "/tmp/Rtmp6wUGo0/file1d6c2beb9073/reference"
 #> 
 #> $id_col
 #> [1] "ID"
@@ -296,18 +296,18 @@ cfg$show_config()
 # Write current configuration to file
 f <- file.path(tempdir(), "config.yaml")
 cfg$export(f)
-#> ℹ Current configuration for 'cfg_googlesearch' written to '/tmp/RtmppVykHU/config.yaml'.
+#> ℹ Current configuration for 'cfg_googlesearch' written to '/tmp/Rtmp6wUGo0/config.yaml'.
 
 # Load from exported config-file and override
 cfg <- paramsGoogleSearch(config_file = f, verbose = TRUE)
-#> ℹ Configuration loaded from '/tmp/RtmppVykHU/config.yaml' for cfg_googlesearch
+#> ℹ Configuration loaded from '/tmp/Rtmp6wUGo0/config.yaml' for cfg_googlesearch
 try(file.remove(f))
 #> [1] TRUE
 
 # Return the current configuration
 cfg$show_config()
 #> $path
-#> [1] "/tmp/RtmppVykHU"
+#> [1] "/tmp/Rtmp6wUGo0"
 #> 
 #> $id_col
 #> [1] "ID"

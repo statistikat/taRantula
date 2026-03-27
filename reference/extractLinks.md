@@ -9,7 +9,7 @@ such as the source URL, extraction level, and timestamp.
 ## Usage
 
 ``` r
-extractLinks(doc, baseurl)
+extractLinks(doc, baseurl, keep_links = NULL)
 ```
 
 ## Arguments
@@ -67,5 +67,5 @@ extractLinks(html, baseurl = "https://example.com")
 #> 1: https://example.com/about  About https://example.com     0
 #>             scraped_at
 #>                 <POSc>
-#> 1: 2026-01-22 12:41:20
+#> 1: 2026-03-27 06:27:02
 ```

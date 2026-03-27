@@ -162,10 +162,10 @@ the process will pause until the 24-hour window resets (default: <code>10000</co
 <li><p><code>max_query_rate</code>: Numeric. Maximum number of queries allowed per 100
 seconds (default: <code>100</code>).</p></li>
 <li><p><code>file</code>: Filename (relative to <code>path</code>) for saving results. If <code>NULL</code>,
-results are not written to disk. Uses <code><a href="https://rdatatable.gitlab.io/data.table/reference/fwrite.html" class="external-link">data.table::fwrite()</a></code>
+results are not written to disk. Uses <code><a href="https://rdrr.io/pkg/data.table/man/fwrite.html" class="external-link">data.table::fwrite()</a></code>
 internally.</p></li>
 <li><p><code>overwrite</code>: Logical. If <code>TRUE</code>, existing files are overwritten. If <code>FALSE</code>,
-existing data are loaded via <code><a href="https://rdatatable.gitlab.io/data.table/reference/fread.html" class="external-link">data.table::fread()</a></code> and new results are
+existing data are loaded via <code><a href="https://rdrr.io/pkg/data.table/man/fread.html" class="external-link">data.table::fread()</a></code> and new results are
 appended. Ensure column names match when appending (default: <code>FALSE</code>).</p></li>
 <li><p><code>credentials</code>: A named list containing Google API credentials. Use
 <code>"key"</code> or <code>"SCRAPING_APIKEY_GOOGLE"</code> for the API Key, and <code>"engine"</code>
@@ -257,7 +257,7 @@ These take precedence over both <code>config_file</code> and default values.</p>
 <span class="r-in"><span><span class="co"># Return the current configuration</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span><span class="op">$</span><span class="fu">show_config</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $path</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/RtmppVykHU/file1b7447f41c24/reference"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/Rtmp6wUGo0/file1d6c2beb9073/reference"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $id_col</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "ID"</span>
@@ -301,18 +301,18 @@ These take precedence over both <code>config_file</code> and default values.</p>
 <span class="r-in"><span><span class="co"># Write current configuration to file</span></span></span>
 <span class="r-in"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"config.yaml"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span><span class="op">$</span><span class="fu">export</span><span class="op">(</span><span class="va">f</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Current configuration for 'cfg_googlesearch' written to '/tmp/RtmppVykHU/config.yaml'.</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Current configuration for 'cfg_googlesearch' written to '/tmp/Rtmp6wUGo0/config.yaml'.</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Load from exported config-file and override</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span> <span class="op">&lt;-</span> <span class="fu">paramsGoogleSearch</span><span class="op">(</span>config_file <span class="op">=</span> <span class="va">f</span>, verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Configuration loaded from '/tmp/RtmppVykHU/config.yaml' for cfg_googlesearch</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Configuration loaded from '/tmp/Rtmp6wUGo0/config.yaml' for cfg_googlesearch</span>
 <span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.remove</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Return the current configuration</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span><span class="op">$</span><span class="fu">show_config</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $path</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/RtmppVykHU"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/Rtmp6wUGo0"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $id_col</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "ID"</span>

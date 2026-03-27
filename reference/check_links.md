@@ -15,7 +15,7 @@ for further processing. The function filters out links that:
 ## Usage
 
 ``` r
-check_links(hrefs, baseurl)
+check_links(hrefs, baseurl, return_bool = TRUE)
 ```
 
 ## Arguments
