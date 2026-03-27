@@ -33,7 +33,7 @@
   if (!DBI::dbExistsTable(con, "results")) {
     return(character())
   }
-  df <- DBI::dbGetQuery(con, "SELECT url, url_redirect FROM results")
+  df <- DBI::dbGetQuery(con, "SELECT url, url_redirect, status FROM results")
   return(df)
 }
 

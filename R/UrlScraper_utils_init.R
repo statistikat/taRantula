@@ -52,22 +52,19 @@
   # URLs
   config$urls_todo <- config$urls # init urls to scrape
   config$urls <- character(0) # init already scraped urls
+  urls_scraped <- NULL
   if (fs::file_exists(config$db_file)) {
     urls_scraped <- .get_scraped_urls(db_file = config$db_file)
-    if (nrow(urls_scraped) > 0) {
-      config$urls_todo <- .filter_new_urls(
-        urls_scraped = urls_scraped,
-        urls_new = config$urls_todo
-      )
+    if (nrow(urls_scraped) == 0) {
+      urls_scraped <- NULL
     }
-  } else {
-    # drop duplicated URLs in $urls_todo
-    config$urls_todo <- .filter_new_urls(
-      urls_scraped = NULL,
-      urls_new = config$urls_todo
-    )
-  }
-
+  }  
+  # drop duplicated URLs in $urls_todo
+  config$urls_todo <- .filter_new_urls(
+    urls_scraped = urls_scraped,
+    urls_new = config$urls_todo
+  )
+  
   config$saved_options <- options()
   options(datatable.prettyprint.char = 50)
   return(config)

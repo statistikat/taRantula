@@ -39,7 +39,7 @@ searchURL <- function(cfg, dat,
   creds <- cfg$get("credentials")
   stopifnot(inherits(cfg, "cfg_googlesearch"))
 
-  params <- cfg$current_config()
+  params <- cfg$show_config()
   id_col <- params$id_col
   verbose <- params$verbose
   print_every_n <- params$print_every_n
@@ -68,8 +68,8 @@ searchURL <- function(cfg, dat,
   }
 
   searchQueries <- dat[[query_col]]
-  if (!attributes(query_col)$query_attr == "built_encoded_query") {
-    rlang::abort("`query_col` was not constructed using buildQuery()")
+  if (!attributes(searchQueries)$query_attr == "built_encoded_query") {
+    rlang::abort(glue::glue("`{query_col}` was not constructed using buildQuery()"))
   }
 
   ##################
@@ -142,7 +142,7 @@ searchURL <- function(cfg, dat,
     }
 
     urls <- lapply(QueryRes$items, function(z) {
-      z <- as.data.table(z[attributes])
+      z <- as.data.table(z[scrape_attributes])
       return(z)
     })
     urls <- rbindlist(urls, use.names = TRUE, fill = TRUE)
@@ -318,7 +318,7 @@ runGoogleSearch <- function(cfg = cfg_googlesearch$new(), dat) {
     save_files <- paste0("URL_GoogleAPI", 1:length(queries), ".csv")
     cfg$set(key = "file", save_files)
   } else {
-    if (rlang::is_character(save_files, n = length(queries))) {
+    if (!rlang::is_character(save_files, n = length(queries))) {
       rlang::abort("Files must be a character vector with the same length as queries,\n
                    e.g length(cfg$get(key = 'file')) == length(cfg$get(key = 'query_col'))")
     }

@@ -150,6 +150,8 @@ UrlScraper <- R6::R6Class(
       private$handle_logs()
 
       len_urls <- length(private$config$urls_todo)
+      urls_scraped <- private$get_scraped_urls()
+      urls_scraped
       len_urls_scraped <- nrow(private$get_scraped_urls())
       cli::cli_alert_info(
         text = glue::glue("Initialized. {len_urls} URLs provided - {len_urls_scraped} URLs already scraped")
@@ -230,47 +232,47 @@ UrlScraper <- R6::R6Class(
 
 
       # Setup Selenium Scraping Sessions
-      cfg_selenium <- private$config$selenium
-      sessions <- NULL
-      if (cfg_selenium$use_selenium == TRUE) {
-        cli::cli_alert_info(
-          text = glue::glue("Creating {nr_workers} selenium sessions")
-        )
-        sessions <- lapply(seq_len(nr_workers), function(x) {
-          selenium::SeleniumSession$new(
-            port = cfg_selenium$port,
-            host = cfg_selenium$host,
-            verbose = cfg_selenium$verbose,
-            browser = cfg_selenium$browser,
-            capabilities = selenium::chrome_options(
-              args = cfg_selenium$ecaps$args,
-              prefs = as.list(cfg_selenium$ecaps$prefs),
-              excludeSwitches = as.list(cfg_selenium$ecaps$excludeSwitches)
-            ),
-            timeout = 60
-          )
-        })
-        cli::cli_alert_success(
-          text = glue::glue("{nr_workers} selenium sessions created")
-        )
-
-        on.exit(
-          {
-            lapply(seq_len(nr_workers), function(x) {
-              sessions[[x]]$close()
-            })
-            cli::cli_alert_success(
-              text = glue::glue("{nr_workers} selenium sessions removed")
-            )
-          },
-          add = TRUE
-        )
-      } else {
-        sessions <- lapply(1:nr_workers, function(z) {
-          z <- c(user_agent = cfg$show_config()$httr$user_agent)
-          return(z)
-        })
-      }
+      # cfg_selenium <- private$config$selenium
+      # sessions <- NULL
+      # if (cfg_selenium$use_selenium == TRUE) {
+      #   cli::cli_alert_info(
+      #     text = glue::glue("Creating {nr_workers} selenium sessions")
+      #   )
+      #   sessions <- lapply(seq_len(nr_workers), function(x) {
+      #     selenium::SeleniumSession$new(
+      #       port = cfg_selenium$port,
+      #       host = cfg_selenium$host,
+      #       verbose = cfg_selenium$verbose,
+      #       browser = cfg_selenium$browser,
+      #       capabilities = selenium::chrome_options(
+      #         args = cfg_selenium$ecaps$args,
+      #         prefs = as.list(cfg_selenium$ecaps$prefs),
+      #         excludeSwitches = as.list(cfg_selenium$ecaps$excludeSwitches)
+      #       ),
+      #       timeout = 60
+      #     )
+      #   })
+      #   cli::cli_alert_success(
+      #     text = glue::glue("{nr_workers} selenium sessions created")
+      #   )
+      # 
+      #   on.exit(
+      #     {
+      #       lapply(seq_len(nr_workers), function(x) {
+      #         sessions[[x]]$close()
+      #       })
+      #       cli::cli_alert_success(
+      #         text = glue::glue("{nr_workers} selenium sessions removed")
+      #       )
+      #     },
+      #     add = TRUE
+      #   )
+      # } else {
+      #   sessions <- lapply(1:nr_workers, function(z) {
+      #     z <- c(user_agent = cfg$show_config()$httr$user_agent)
+      #     return(z)
+      #   })
+      # }
 
       start_time <- Sys.time()
 
@@ -294,14 +296,18 @@ UrlScraper <- R6::R6Class(
           steps = length(urls),
           auto_finish = FALSE
         )
+        cli::cli_alert_success(
+          text = glue::glue("starting {length(chunks)} parallel scraping processes")
+        )
         results <- tryCatch(
           expr = future.apply::future_lapply(seq_along(chunks), function(x) {
             .initialize_worker_dev()
+            
             private$worker_scrape(
               urls = chunks[[x]],
               chunk_id = x,
               p = p,
-              sid = sessions[[x]]
+              config = private$config
             )
           },
           future.seed = TRUE,
@@ -319,6 +325,7 @@ UrlScraper <- R6::R6Class(
           future.globals = c(
             ".write_snapshot",
             ".worker_scrape",
+            "worker_scrape",
             ".scrape_single_url",
             "extractLinks",
             "check_links",
@@ -611,21 +618,12 @@ UrlScraper <- R6::R6Class(
       idx <- ((seq_along(x) - 1L) %% k) + 1L
       split(x, idx)
     },
-    worker_scrape = function(urls, chunk_id, p, sid) {
+    worker_scrape = function(urls, chunk_id, p, config) {
       return(.worker_scrape(
-        inputs = list(
-          db_file = private$config$db_file,
-          robots_check = private$config$robots$check,
-          p = p,
-          urls = urls,
-          chunk_id = chunk_id,
-          snapshot_every = private$config$selenium$snapshot_every,
-          snapshot_dir = private$config$snapshot_dir,
-          stop_file = private$config$stop_file,
-          progress_dir = private$config$progress_dir,
-          exclude_social_links = private$config$exclude_social_links
-        ),
-        sid = sid
+        urls = urls,
+        chunk_id = chunk_id,
+        p = p,
+        config = config
       ))
     },
     write_snapshot = function(dt, chunk_id) {

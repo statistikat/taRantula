@@ -51,7 +51,7 @@
     scraped_at = as.POSIXct(character(0))
   )
 
-  if (isFALSE(check_robotsdata(db_file = db_file, url = url))) {
+  if (robots_check == TRUE & isFALSE(check_robotsdata(db_file = db_file, url = url))) {
     # scraping is not allowed
     return(
       data.table::data.table(
@@ -166,33 +166,109 @@
 #' }
 #'
 #' @keywords internal
-.worker_scrape <- function(inputs, sid) {
-  db_file <- inputs$db_file
-  urls <- inputs$urls
-  chunk_id <- inputs$chunk_id
-  snapshot_every <- inputs$snapshot_every
-  snapshot_dir <- fs::path(inputs$snapshot_dir, chunk_id)
+.worker_scrape <- function(urls, chunk_id = 1, 
+                           p = function(amount, message) cat(amount, message, "\n"), 
+                           config) {
+  
+  db_file <- config$db_file
+  robots_check <- config$robots$check
+  snapshot_every = config$selenium$snapshot_every
+  snapshot_dir = config$snapshot_dir
   fs::dir_create(snapshot_dir, recurse = TRUE)
-  stop_file <- inputs$stop_file
-  progress_dir <- inputs$progress_dir
+  stop_file = config$stop_file
+  progress_dir = config$progress_dir
   progress_file <- fs::path(progress_dir, chunk_id, "progress.log")
-  robots_check <- inputs$robots_check
-  p <- inputs$p
-  db_file <- inputs$db_file
-
   fs::dir_create(fs::path_dir(progress_file), recurse = TRUE)
+  exclude_social_links = config$exclude_social_links
+  
+  # init selenium
+  if(config$selenium$use_selenium == TRUE){
+    sid <- 
+      selenium::SeleniumSession$new(
+        port = config$selenium$port,
+        host = config$selenium$host,
+        verbose = config$selenium$verbose,
+        browser = config$selenium$browser,
+        capabilities = selenium::chrome_options(
+          args = config$selenium$ecaps$args,
+          prefs = as.list(config$selenium$ecaps$prefs),
+          excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
+        ),
+        timeout = 60
+      )
+  }else{
+    sid <- c(user_agent = config$httr$user_agent)
+  }
+  
+  log_file <- paste0(paste(sample(letters,10), collapse = ""),".txt")
+  
+  
   out <- NULL
   for (i in seq_along(urls)) {
     if (fs::file_exists(stop_file)) {
       break
     }
     u <- urls[[i]]
+    
+    cat(u, "\n", file = log_file, append = TRUE)
+    
     rec <- .scrape_single_url(
       db_file = db_file,
       sid = sid,
       url = u,
       robots_check = robots_check
     )
+    
+    # if selenium is true and scraping failed
+    # close session and start new selenium session
+    retries <- 0
+    while(is.na(rec$src) & config$selenium$use_selenium == TRUE & retries < 3){
+      
+      tryCatch(sid$close())
+      sid <- 
+        selenium::SeleniumSession$new(
+          port = config$selenium$port,
+          host = config$selenium$host,
+          verbose = config$selenium$verbose,
+          browser = config$selenium$browser,
+          capabilities = selenium::chrome_options(
+            args = config$selenium$ecaps$args,
+            prefs = as.list(config$selenium$ecaps$prefs),
+            excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
+          ),
+          timeout = 60
+        )
+      
+      # retry scraping with 
+      rec <- .scrape_single_url(
+        db_file = db_file,
+        sid = sid,
+        url = u,
+        robots_check = robots_check
+      )
+      
+      retries <- retries + 1
+    }
+    
+    # if all re-tries were unsuccseful
+    # reopen selenium and continue
+    if(is.na(rec$src)){
+      tryCatch(sid$close())
+      sid <- 
+        selenium::SeleniumSession$new(
+          port = config$selenium$port,
+          host = config$selenium$host,
+          verbose = config$selenium$verbose,
+          browser = config$selenium$browser,
+          capabilities = selenium::chrome_options(
+            args = config$selenium$ecaps$args,
+            prefs = as.list(config$selenium$ecaps$prefs),
+            excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
+          ),
+          timeout = 60
+        )
+    }
+    
     if (is.null(out)) {
       out <- data.table::copy(rec)
     } else {

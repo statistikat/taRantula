@@ -38,7 +38,8 @@
 #' @examples
 #' html <- "<html><body><a href='/about'>About</a></body></html>"
 #' extractLinks(html, baseurl = "https://example.com")
-extractLinks <- function(doc, baseurl) {
+extractLinks <- function(doc, baseurl, keep_links = NULL) {
+  
   href <- NULL
   if (!inherits(doc, "xml_document")) {
     doc <- rvest::read_html(doc)
@@ -69,8 +70,13 @@ extractLinks <- function(doc, baseurl) {
   # remove links which point to other homepages
   # remove links identical to baseurl
   # remove links pointing to image/video/document
-  keep <- check_links(hrefs = hrefs, baseurl = baseurl)
-
+  keep <- check_links(hrefs = hrefs, baseurl = baseurl, 
+                      return_bool = is.null(keep_links))
+  
+  if(!is.null(keep_links)){
+    keep <- keep %in% c("", keep_links)
+  }
+  
   dt_links <- data.table::data.table(
     href = hrefs[keep],
     label = labels[keep],
@@ -109,7 +115,7 @@ extractLinks <- function(doc, baseurl) {
 #' @export
 #'
 #' @keywords internal
-check_links <- function(hrefs, baseurl) {
+check_links <- function(hrefs, baseurl, return_bool = TRUE) {
   # ----------------------------------------------------------
   # helper for pasting with missing values
   pasteNA <- function(y, x, sep = "", na.sub = "") {
@@ -128,6 +134,7 @@ check_links <- function(hrefs, baseurl) {
   ## cond1
   # same domain as url
   sameDomain <- get_domain(hrefs) == get_domain(baseurl)
+  
   # cannot parse domain -> kick url out
   sameDomain[is.na(sameDomain)] <- FALSE
 
@@ -182,6 +189,16 @@ check_links <- function(hrefs, baseurl) {
   # no fragmants but only on main URL
   linksSelect <- sameDomain & noFile & nofragment & diffPathParam
 
+  if(return_bool == TRUE){
+    return(linksSelect)
+  }
+  
+  linksSelect <- fcase(sameDomain == FALSE, "different domain",
+                       noFile == FALSE, "document",
+                       nofragment == FALSE, "anker point",
+                       diffPathParam == FALSE, "duplicate",
+                       default = "")
+  
   return(linksSelect)
 }
 
