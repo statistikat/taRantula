@@ -99,7 +99,7 @@
       )
     },
     error = function(e) {
-      print(e)
+      message("Scrape failed for: ", url)
       data.table::data.table(
         url = url,
         url_redirect = NA,
@@ -166,10 +166,10 @@
 #' }
 #'
 #' @keywords internal
-.worker_scrape <- function(urls, chunk_id = 1, 
-                           p = function(amount, message) cat(amount, message, "\n"), 
+.worker_scrape <- function(urls, chunk_id = 1,
+                           p = function(amount, message) cat(amount, message, "\n"),
                            config) {
-  
+
   db_file <- config$db_file
   robots_check <- config$robots$check
   snapshot_every = config$selenium$snapshot_every
@@ -180,11 +180,62 @@
   progress_file <- fs::path(progress_dir, chunk_id, "progress.log")
   fs::dir_create(fs::path_dir(progress_file), recurse = TRUE)
   exclude_social_links = config$exclude_social_links
-  
+
   # init selenium
-  if(config$selenium$use_selenium == TRUE){
-    sid <- 
-      selenium::SeleniumSession$new(
+  sid <- NULL
+  if (config$selenium$use_selenium) {
+    sid <- selenium::SeleniumSession$new(
+      port = config$selenium$port,
+      host = config$selenium$host,
+      verbose = config$selenium$verbose,
+      browser = config$selenium$browser,
+      capabilities = selenium::chrome_options(
+        args = config$selenium$ecaps$args,
+        prefs = as.list(config$selenium$ecaps$prefs),
+        excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
+      ),
+      timeout = 300 # try preventing grid-timeouts during long page loads
+    )
+
+    # exit-handler:
+    # runs once when the function returns or crashes and
+    # closes whatever session object is currently assigned to 'sid'.
+    on.exit({
+      if (!is.null(sid)) try(sid$close(), silent = TRUE)
+    }, add = TRUE)
+  } else {
+    sid <- c(user_agent = config$httr$user_agent)
+  }
+
+  log_file <- tempfile(tmpdir = config$project_dir, fileext = ".txt")
+  out <- NULL
+
+  # main scraping loop
+  for (i in seq_along(urls)) {
+    if (fs::file_exists(stop_file)) break
+
+    u <- urls[[i]]
+    if (is.list(u)) u <- unlist(u)
+    u <- as.character(u)
+
+    cat(u, "\n", file = log_file, append = TRUE)
+    rec <- .scrape_single_url(
+      db_file = db_file,
+      sid = sid,
+      url = u,
+      robots_check = robots_check
+    )
+
+    # Retry-logic using session refresh
+    # if result is NA and we use Selenium, try up to 3 times with a fresh session
+    retries <- 0
+    while (is.na(rec$src) && config$selenium$use_selenium && retries < 3) {
+      # explicitly close the stuck/failed session
+      try(sid$close(), silent = TRUE)
+
+      # create a fresh session and assign to 'sid'
+      # -> the top-level on.exit() tracks this now
+      sid <- selenium::SeleniumSession$new(
         port = config$selenium$port,
         host = config$selenium$host,
         verbose = config$selenium$verbose,
@@ -194,84 +245,21 @@
           prefs = as.list(config$selenium$ecaps$prefs),
           excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
         ),
-        timeout = 60
+        timeout = 300
       )
-    on.exit(sid$close())
-  }else{
-    sid <- c(user_agent = config$httr$user_agent)
-  }
-  
-  log_file <- paste0(paste(sample(letters,10), collapse = ""),".txt")
-  
-  
-  out <- NULL
-  for (i in seq_along(urls)) {
-    if (fs::file_exists(stop_file)) {
-      break
-    }
-    u <- urls[[i]]
-    
-    cat(u, "\n", file = log_file, append = TRUE)
-    
-    rec <- .scrape_single_url(
-      db_file = db_file,
-      sid = sid,
-      url = u,
-      robots_check = robots_check
-    )
-    
-    # if selenium is true and scraping failed
-    # close session and start new selenium session
-    retries <- 0
-    while(is.na(rec$src) & config$selenium$use_selenium == TRUE & retries < 3){
-      
-      tryCatch(sid$close(timeout = 300))
-      sid <- 
-        selenium::SeleniumSession$new(
-          port = config$selenium$port,
-          host = config$selenium$host,
-          verbose = config$selenium$verbose,
-          browser = config$selenium$browser,
-          capabilities = selenium::chrome_options(
-            args = config$selenium$ecaps$args,
-            prefs = as.list(config$selenium$ecaps$prefs),
-            excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
-          ),
-          timeout = 600
-        )
-      on.exit(sid$close())
-      
-      # retry scraping with 
+
+      # retry scraping
       rec <- .scrape_single_url(
         db_file = db_file,
         sid = sid,
         url = u,
         robots_check = robots_check
       )
-      
+
       retries <- retries + 1
     }
-    
-    # if all re-tries were unsuccseful
-    # reopen selenium and continue
-    if(is.na(rec$src)){
-      tryCatch(sid$close(timeout = 300))
-      sid <- 
-        selenium::SeleniumSession$new(
-          port = config$selenium$port,
-          host = config$selenium$host,
-          verbose = config$selenium$verbose,
-          browser = config$selenium$browser,
-          capabilities = selenium::chrome_options(
-            args = config$selenium$ecaps$args,
-            prefs = as.list(config$selenium$ecaps$prefs),
-            excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
-          ),
-          timeout = 600
-        )
-      on.exit(sid$close())
-    }
-    
+
+    # data aggregation/checkpointing
     if (is.null(out)) {
       out <- data.table::copy(rec)
     } else {
@@ -279,9 +267,10 @@
     }
 
     cat(sprintf("%s\t%d\t%s\n", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), chunk_id, u),
-      file = progress_file, append = TRUE
+        file = progress_file, append = TRUE
     )
 
+    # snapshotting
     if ((i %% snapshot_every) == 0L) {
       .write_snapshot(dt = out, chunk_id = chunk_id, snapshot_dir = snapshot_dir)
       p(amount = nrow(out), message = sprintf("Adding %d chunks", nrow(out)))
@@ -289,8 +278,10 @@
     }
   }
 
-  if (nrow(out) > 0) {
+  # finalize
+  if (!is.null(out) && nrow(out) > 0) {
     .write_snapshot(dt = out, chunk_id = chunk_id, snapshot_dir = snapshot_dir)
   }
+
   invisible(TRUE)
 }

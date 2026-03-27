@@ -1,7 +1,7 @@
 Package: taRantula
 Title: The taRantula package provides methods and utility-functions to scrape web pages
-Version: 0.1.0
-Date: 2026-01-22
+Version: 0.1.1
+Date: 2026-03-27
 Authors@R: c(person("Johannes", "Gussenbauer", role = c("aut", "cre"),
                      email = "Johannes.Gussenbauer@statistik.gv.at"),
               person("Bernhard", "Meindl", role = "aut",

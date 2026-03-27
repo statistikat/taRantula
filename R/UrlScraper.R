@@ -255,7 +255,7 @@ UrlScraper <- R6::R6Class(
       #   cli::cli_alert_success(
       #     text = glue::glue("{nr_workers} selenium sessions created")
       #   )
-      # 
+      #
       #   on.exit(
       #     {
       #       lapply(seq_len(nr_workers), function(x) {
@@ -302,7 +302,7 @@ UrlScraper <- R6::R6Class(
         results <- tryCatch(
           expr = future.apply::future_lapply(seq_along(chunks), function(x) {
             .initialize_worker_dev()
-            
+
             private$worker_scrape(
               urls = chunks[[x]],
               chunk_id = x,
