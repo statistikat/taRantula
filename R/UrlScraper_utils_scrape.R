@@ -118,16 +118,15 @@
 #' validation, and stopping conditions.
 #'
 #' @param inputs A named list containing:
-#'     - **db_file**: Path to the DuckDB file used for robots.txt checks.
-#'     - **urls**: Character vector of URLs to process in this worker.
-#'     - **chunk_id**: Numeric identifier for this worker chunk.
-#'     - **snapshot_every**: Integer: write snapshot files every N URLs.
-#'     - **snapshot_dir**: Directory in which snapshot output is stored.
-#'     - **stop_file**: Path to a file whose existence indicates that scraping
-#'       should stop early.
-#'     - **progress_dir**: Directory for storing progress logs.
-#'     - **robots_check**: Logical indicating whether robots.txt rules should be evaluated.
-#'     - **p**: A progress callback function accepting arguments `amount` and `message`.
+#' - **db_file**: Path to the DuckDB file used for robots.txt checks.
+#' - **urls**: Character vector of URLs to process in this worker.
+#' - **chunk_id**: Numeric identifier for this worker chunk.
+#' - **snapshot_every**: Integer: write snapshot files every N URLs.
+#' - **snapshot_dir**: Directory in which snapshot output is stored.
+#' - **stop_file**: Path to a file whose existence indicates that scraping should stop early.
+#' - **progress_dir**: Directory for storing progress logs.
+#' - **robots_check**: Logical indicating whether robots.txt rules should be evaluated.
+#' - **p**: A progress callback function accepting arguments `amount` and `message`.
 #' @param sid A Selenium session object or a list of HTTP headers, passed along to
 #'    `.scrape_single_url()`.
 #'
