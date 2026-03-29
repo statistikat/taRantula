@@ -1,4 +1,3 @@
-
 #' @title UrlScraper R6 Class for Parallel Web Scraping with Selenium
 #'
 #' @description
@@ -81,7 +80,7 @@
 #' results_dt <- scraper$results()
 #'
 #' # Retrieve logs and links
-#' logs_dt  <- scraper$logs()
+#' logs_dt <- scraper$logs()
 #' links_dt <- scraper$links()
 #'
 #' # Add new URLs to be scraped (only those not already in the DB)
@@ -102,11 +101,9 @@
 #' # Clean up resources
 #' scraper$close()
 #' }
-
 UrlScraper <- R6::R6Class(
   classname = "UrlScraper",
   public = list(
-
     #' @description
     #' Create a new `UrlScraper` object.
     #'
@@ -126,7 +123,6 @@ UrlScraper <- R6::R6Class(
     #'   * any additional options required by helper functions.
     #'
     #' @return An initialized `UrlScraper` object (invisibly).
-
     initialize = function(config) {
       private$config <- .initialize(config = config)
 
@@ -151,7 +147,6 @@ UrlScraper <- R6::R6Class(
 
       len_urls <- length(private$config$urls_todo)
       urls_scraped <- private$get_scraped_urls()
-      urls_scraped
       len_urls_scraped <- nrow(private$get_scraped_urls())
       cli::cli_alert_info(
         text = glue::glue("Initialized. {len_urls} URLs provided - {len_urls_scraped} URLs already scraped")
@@ -180,17 +175,19 @@ UrlScraper <- R6::R6Class(
     #' @return The `UrlScraper` object (invisibly), with internal state
     #'   updated to reflect newly scraped URLs.
     scrape = function() {
+      # Check if dev-mode is required (envvar or package is not installed)
+      is_dev <- private$is_dev()
       private$init_storage()
-
+      
       # Handling Snapshots (if any) before Scraping
       private$handle_snapshots()
-
+      
       # Handling Logs (if any) before Scraping
       private$handle_logs()
 
       urls <- private$config$urls_todo
       urls_scraped <- private$get_scraped_urls()
-      total <- length(c(private$config$urls, urls))
+      total <- length(urls) + nrow(urls_scraped)
       done <- nrow(urls_scraped)
       if (length(urls) == 0) {
         cli::cli_alert_info("All URLs already scraped. Nothing to do.")
@@ -213,137 +210,105 @@ UrlScraper <- R6::R6Class(
         )
         return(invisible(self))
       }
-      fs::file_delete(fs::dir_ls(private$config$progress_dir))
+
+      # Cleanup
+      if (fs::dir_exists(private$config$progress_dir)) {
+        fs::file_delete(fs::dir_ls(private$config$progress_dir))
+      }
 
       nr_workers <- min(length(urls), private$config$selenium$workers)
-
+      
       # Split into chunks
       chunks <- private$split_into_chunks(
         x = urls,
         k = min(length(urls), nr_workers)
       )
 
+      # avoid R6 serialization issues
+      conf_list <- as.list(private$config)
+
+      # setup parallelization strategy
       oplan <- future::plan()
       on.exit(future::plan(oplan), add = TRUE)
       future::plan(
-        strategy = future::multisession,
+        strategy = future::multisession, 
         workers = nr_workers
       )
+      
+      cli::cli_alert_success("Starting {nr_workers} parallel workers")
 
-
-      # Setup Selenium Scraping Sessions
-      # cfg_selenium <- private$config$selenium
-      # sessions <- NULL
-      # if (cfg_selenium$use_selenium == TRUE) {
-      #   cli::cli_alert_info(
-      #     text = glue::glue("Creating {nr_workers} selenium sessions")
-      #   )
-      #   sessions <- lapply(seq_len(nr_workers), function(x) {
-      #     selenium::SeleniumSession$new(
-      #       port = cfg_selenium$port,
-      #       host = cfg_selenium$host,
-      #       verbose = cfg_selenium$verbose,
-      #       browser = cfg_selenium$browser,
-      #       capabilities = selenium::chrome_options(
-      #         args = cfg_selenium$ecaps$args,
-      #         prefs = as.list(cfg_selenium$ecaps$prefs),
-      #         excludeSwitches = as.list(cfg_selenium$ecaps$excludeSwitches)
-      #       ),
-      #       timeout = 60
-      #     )
-      #   })
-      #   cli::cli_alert_success(
-      #     text = glue::glue("{nr_workers} selenium sessions created")
-      #   )
-      #
-      #   on.exit(
-      #     {
-      #       lapply(seq_len(nr_workers), function(x) {
-      #         sessions[[x]]$close()
-      #       })
-      #       cli::cli_alert_success(
-      #         text = glue::glue("{nr_workers} selenium sessions removed")
-      #       )
-      #     },
-      #     add = TRUE
-      #   )
-      # } else {
-      #   sessions <- lapply(1:nr_workers, function(z) {
-      #     z <- c(user_agent = cfg$show_config()$httr$user_agent)
-      #     return(z)
-      #   })
-      # }
-
+      # start workers
       start_time <- Sys.time()
+      progressr::with_progress({
+        p <- progressr::progressor(steps = length(urls))
+        # "dev"-mode via `environment variable or if package is not available
+        if (is_dev) {
+          # capture the required functions and packages
+          f_pkgs <- c(
+            "progressr", 
+            "data.table", 
+            "selenium", 
+            "fs", 
+            "jsonlite", 
+            "xml2", 
+            "rvest", 
+            "httr", 
+            "robotstxt", 
+            "stats"
+          )          
+          f_list <- list(
+            ".worker_scrape" = .worker_scrape,
+            ".scrape_single_url"  = .scrape_single_url,
+            ".write_snapshot" = .write_snapshot,
+            "check_robotsdata" = check_robotsdata,
+            "extractLinks" = extractLinks,
+            "query_robotsdata" = query_robotsdata,
+            "get_domain" = get_domain,
+            "check_links" = check_links
+          )
 
-      # this is mainly for testing: if taRantula is not installed, we need to
-      # run devtools::load_all() within each future-worker so that package utility
-      # functions are available
-      .initialize_worker_dev <- function() {
-        dev <- !"taRantula" %in% rownames(utils::installed.packages())
-        if (!dev) {
-          return(invisible(NULL))
+          # strip the 'taRantula' environment pointer
+          # which should prevent the worker from trying to load a non-existent package
+          f_globals <- lapply(f_list, function(fn) {
+            environment(fn) <- .GlobalEnv
+            return(fn)
+          })
+
+          # Add the config and progressor to the sanitized list
+          f_globals$conf_list <- as.list(private$config)
+          f_globals$p <- p
+        } else {
+          f_globals <- TRUE
+          f_pkgs <- "taRantula"
         }
-        if (!requireNamespace("devtools", quietly = TRUE)) {
-          rlang::abort("'taRantula' is not installed and 'devtools' not available")
-        }
-        devtools::load_all(quiet = TRUE)
-      }
 
-      out <- progressr::with_progress({
-        # global Progress
-        p <- progressr::progressor(
-          steps = length(urls),
-          auto_finish = FALSE
-        )
-        cli::cli_alert_success(
-          text = glue::glue("starting {length(chunks)} parallel scraping processes")
-        )
-        results <- tryCatch(
-          expr = future.apply::future_lapply(seq_along(chunks), function(x) {
-            .initialize_worker_dev()
-
-            private$worker_scrape(
-              urls = chunks[[x]],
-              chunk_id = x,
-              p = p,
-              config = private$config
+        # Use tryCatch inside the loop to see what's happening
+        results <- future.apply::future_lapply(
+          seq_along(chunks),
+          function(x) {
+            tryCatch(
+              expr = {
+                .worker_scrape(
+                  urls = chunks[[x]],
+                  chunk_id = x,
+                  p = p,
+                  config = conf_list
+                )
+              },
+              error = function(e) {
+                # we may get a reason for the error here
+                message("FATAL WORKER ERROR: ", e$message)
+                return(FALSE)
+              }
             )
           },
           future.seed = TRUE,
-          future.packages = c(
-            "data.table",
-            "fs",
-            "jsonlite",
-            "progressr",
-            "selenium",
-            "xml2",
-            "rvest",
-            "httr",
-            "robotstxt"
-          ),
-          future.globals = c(
-            ".write_snapshot",
-            ".worker_scrape",
-            "worker_scrape",
-            ".scrape_single_url",
-            "extractLinks",
-            "check_links",
-            "check_robotsdata",
-            "query_robotsdata",
-            "get_domain"
-          )
-          ),
-          error = function(e) {
-            message("error: ")
-            print(e)
-            e
-          }
+          future.globals = f_globals,
+          future.packages = f_pkgs
         )
-        p(type = "finish")
       })
 
-      # Cleanup
+      # finalize and update status
       private$handle_snapshots()
       private$handle_logs()
 
@@ -351,7 +316,7 @@ UrlScraper <- R6::R6Class(
       scraped_urls <- private$get_scraped_urls()
       private$config$urls <- scraped_urls[["url"]]
       private$config$urls_todo <- setdiff(private$config$urls_todo, scraped_urls)
-
+      
       now_scraped <- nrow(scraped_urls)
       elapsed <- difftime(Sys.time(), start_time, units = "secs")
       cli::cli_alert_info(
@@ -359,10 +324,9 @@ UrlScraper <- R6::R6Class(
           "Done. Scraped {now_scraped}/{total} URLs ({.fmt(100 * (now_scraped / total), digits = 1)}%).",
           "Elapsed: {.fmt(elapsed)}s"
         ))
-      )
+      )      
       invisible(self)
     },
-
 
     #' @description
     #' Update the list of URLs to be scraped.
@@ -427,7 +391,6 @@ UrlScraper <- R6::R6Class(
       }
       invisible(self)
     },
-
 
     #' @description
     #' Extract scraping results from the internal database.
@@ -578,6 +541,11 @@ UrlScraper <- R6::R6Class(
   ),
   private = list(
     config = list(),
+    is_dev = function() {
+      env_dev <- tolower(Sys.getenv("TARANTULA_DEV_MODE")) == "true"
+      is_installed <- system.file(package = "taRantula") != ""
+      return(env_dev || !is_installed)
+    },
     finalize = function() {
       # Try to cleanup before GC cleanup
       try(private$handle_snapshots(), silent = TRUE)
@@ -617,14 +585,6 @@ UrlScraper <- R6::R6Class(
       k <- max(1L, min(k, length(x)))
       idx <- ((seq_along(x) - 1L) %% k) + 1L
       split(x, idx)
-    },
-    worker_scrape = function(urls, chunk_id, p, config) {
-      return(.worker_scrape(
-        urls = urls,
-        chunk_id = chunk_id,
-        p = p,
-        config = config
-      ))
     },
     write_snapshot = function(dt, chunk_id) {
       .write_snapshot(

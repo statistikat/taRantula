@@ -221,5 +221,5 @@
   ts <- format(Sys.time(), "%Y%m%dT%H%M%S")
   f <- fs::path(snapshot_dir, sprintf("snap_chunk%02d_%s.rds", chunk_id, ts))
   saveRDS(dt, file = f)
-  return(invisible(NULL))
+  return(dt[0])
 }

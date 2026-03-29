@@ -6,22 +6,20 @@
 #' `data.table` containing the scraping results.
 #'
 #' @param db_file Character string specifying the path to the DuckDB database file
-#'   used for robots.txt rule evaluation.
+#'    used for robots.txt rule evaluation.
 #' @param sid Either a Selenium session object (`SeleniumSession`) or a named list of
-#'   HTTP headers to be used with `httr::GET()`.
+#'    HTTP headers to be used with `httr::GET()`.
 #' @param url Character string containing the URL to be scraped.
 #' @param robots_check Logical indicating whether robots.txt rules should be validated
-#'   before scraping.
+#'    before scraping.
 #'
 #' @return A `data.table` with the following columns:
-#'   \describe{
-#'     \item{url}{Final URL after potential redirection.}
-#'     \item{url_redirect}{Original URL, if a redirect occurred; otherwise `NA`.}
-#'     \item{status}{Logical indicating whether scraping succeeded.}
-#'     \item{src}{HTML source (or `NA` if scraping failed or disallowed).}
-#'     \item{links}{A list-column containing extracted link information as a `data.table`.}
-#'     \item{scraped_at}{POSIXct timestamp indicating when the scrape occurred.}
-#'   }
+#'     - **url**: Final URL after potential redirection.
+#'     - **url_redirect**: Original URL, if a redirect occurred; otherwise `NA`.
+#'     - **status**: Logical indicating whether scraping succeeded.
+#'     - **src**: HTML source (or `NA` if scraping failed or disallowed).
+#'     - **links**: A list-column containing extracted link information as a `data.table`.
+#'     - **scraped_at**: POSIXct timestamp indicating when the scrape occurred.
 #'
 #' @details
 #' The function first checks robots.txt rules using `check_robotsdata()`.
@@ -30,7 +28,6 @@
 #' redirected final URL is captured. For non-Selenium inputs, an HTTP GET request
 #' is performed.
 #' Errors during scraping are caught and converted into structured output.
-#'
 #'
 #' @keywords internal
 .scrape_single_url <- function(db_file, sid, url, robots_check) {
@@ -121,23 +118,21 @@
 #' validation, and stopping conditions.
 #'
 #' @param inputs A named list containing:
-#'   \describe{
-#'     \item{db_file}{Path to the DuckDB file used for robots.txt checks.}
-#'     \item{urls}{Character vector of URLs to process in this worker.}
-#'     \item{chunk_id}{Numeric identifier for this worker chunk.}
-#'     \item{snapshot_every}{Integer: write snapshot files every N URLs.}
-#'     \item{snapshot_dir}{Directory in which snapshot output is stored.}
-#'     \item{stop_file}{Path to a file whose existence indicates that scraping
-#'       should stop early.}
-#'     \item{progress_dir}{Directory for storing progress logs.}
-#'     \item{robots_check}{Logical indicating whether robots.txt rules should be evaluated.}
-#'     \item{p}{A progress callback function accepting arguments `amount` and `message`.}
-#'   }
+#'     - **db_file**: Path to the DuckDB file used for robots.txt checks.
+#'     - **urls**: Character vector of URLs to process in this worker.
+#'     - **chunk_id**: Numeric identifier for this worker chunk.
+#'     - **snapshot_every**: Integer: write snapshot files every N URLs.
+#'     - **snapshot_dir**: Directory in which snapshot output is stored.
+#'     - **stop_file**: Path to a file whose existence indicates that scraping
+#'       should stop early.
+#'     - **progress_dir**: Directory for storing progress logs.
+#'     - **robots_check**: Logical indicating whether robots.txt rules should be evaluated.
+#'     - **p**: A progress callback function accepting arguments `amount` and `message`.
 #' @param sid A Selenium session object or a list of HTTP headers, passed along to
-#'   `.scrape_single_url()`.
+#'    `.scrape_single_url()`.
 #'
 #' @return Invisibly returns `TRUE` after completing all scraping tasks assigned to
-#'   this worker.
+#'    this worker.
 #'
 #' @details
 #' The function iterates over provided URLs, invoking `.scrape_single_url()` for each.
@@ -164,124 +159,133 @@
 #'   sid = my_selenium_session
 #' )
 #' }
-#'
 #' @keywords internal
-.worker_scrape <- function(urls, chunk_id = 1,
-                           p = function(amount, message) cat(amount, message, "\n"),
-                           config) {
-
+.worker_scrape <- function(urls, chunk_id, p, config) {
+  # Safely create a Selenium Session
+  .create_sid <- function(cfg, timeout = 300) {
+    if (!isTRUE(cfg$selenium$use_selenium)) {
+      return(c(user_agent = cfg$httr$user_agent))
+    }
+    tryCatch({
+      selenium::SeleniumSession$new(
+        port = cfg$selenium$port,
+        host = cfg$selenium$host,
+        verbose = cfg$selenium$verbose,
+        browser = cfg$selenium$browser,
+        capabilities = selenium::chrome_options(
+          args = cfg$selenium$ecaps$args,
+          prefs = as.list(cfg$selenium$ecaps$prefs),
+          excludeSwitches = as.list(cfg$selenium$ecaps$excludeSwitches)
+        ),
+        timeout = timeout
+      )
+    }, error = function(e) NULL)
+  }
+  
+  # consistent logging and progress-updating
+  .log_and_progress <- function(p, u_str, is_retry = FALSE, status = NULL) {
+    # update progress bar
+    if (!missing(p)) {
+      prefix <- if (is_retry) "Retry " else ""
+      p(message = glue::glue("{prefix}W{chunk_id}: {basename(u_str)}"), amount = 1)
+    }
+    
+    # write to log
+    status_suffix <- if (!is.null(status)) glue::glue("\tRETRY_{status}") else ""
+    glue::glue("{format(Sys.time())}\t{chunk_id}\t{u_str}{status_suffix}\n") |> 
+      cat(file = progress_file, append = TRUE)
+  }
+  
+  # setup vars
   db_file <- config$db_file
   robots_check <- config$robots$check
-  snapshot_every = config$selenium$snapshot_every
-  snapshot_dir = config$snapshot_dir
-  fs::dir_create(snapshot_dir, recurse = TRUE)
-  stop_file = config$stop_file
-  progress_dir = config$progress_dir
-  progress_file <- fs::path(progress_dir, chunk_id, "progress.log")
+  snapshot_every <- config$selenium$snapshot_every
+  snapshot_dir <- config$snapshot_dir
+  stop_file <- config$stop_file
+  progress_file  <- fs::path(config$progress_dir, chunk_id, "progress.log")
   fs::dir_create(fs::path_dir(progress_file), recurse = TRUE)
-  exclude_social_links = config$exclude_social_links
-
-  # init selenium
-  sid <- NULL
-  if (config$selenium$use_selenium) {
-    sid <- selenium::SeleniumSession$new(
-      port = config$selenium$port,
-      host = config$selenium$host,
-      verbose = config$selenium$verbose,
-      browser = config$selenium$browser,
-      capabilities = selenium::chrome_options(
-        args = config$selenium$ecaps$args,
-        prefs = as.list(config$selenium$ecaps$prefs),
-        excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
-      ),
-      timeout = 300 # try preventing grid-timeouts during long page loads
-    )
-
-    # exit-handler:
-    # runs once when the function returns or crashes and
-    # closes whatever session object is currently assigned to 'sid'.
-    on.exit({
-      if (!is.null(sid)) try(sid$close(), silent = TRUE)
-    }, add = TRUE)
-  } else {
-    sid <- c(user_agent = config$httr$user_agent)
+  fs::dir_create(snapshot_dir, recurse = TRUE)
+  
+  sid <- .create_sid(cfg = config)
+  if (is.null(sid) && isTRUE(config$selenium$use_selenium)) {
+    return(FALSE)
   }
-
-  log_file <- tempfile(tmpdir = config$project_dir, fileext = ".txt")
+  
+  on.exit({
+    if ("SeleniumSession" %in% class(sid)) {
+      try(sid$close(), silent = TRUE)
+    }
+  }, add = TRUE)
+  
   out <- NULL
-
-  # main scraping loop
+  retry_queue <- character()
+  
+  # main scraping loop; try every url once and move
+  # failed urls to retry_queue
   for (i in seq_along(urls)) {
     if (fs::file_exists(stop_file)) break
-
-    u <- urls[[i]]
-    if (is.list(u)) u <- unlist(u)
-    u <- as.character(u)
-
-    cat(u, "\n", file = log_file, append = TRUE)
+    u <- as.character(urls[[i]])
+    
     rec <- .scrape_single_url(
-      db_file = db_file,
-      sid = sid,
-      url = u,
+      db_file = db_file, 
+      sid = sid, 
+      url = u, 
       robots_check = robots_check
     )
-
-    # Retry-logic using session refresh
-    # if result is NA and we use Selenium, try up to 3 times with a fresh session
-    retries <- 0
-    while (is.na(rec$src) && config$selenium$use_selenium && retries < 3) {
-      # explicitly close the stuck/failed session
-      try(sid$close(), silent = TRUE)
-
-      # create a fresh session and assign to 'sid'
-      # -> the top-level on.exit() tracks this now
-      sid <- selenium::SeleniumSession$new(
-        port = config$selenium$port,
-        host = config$selenium$host,
-        verbose = config$selenium$verbose,
-        browser = config$selenium$browser,
-        capabilities = selenium::chrome_options(
-          args = config$selenium$ecaps$args,
-          prefs = as.list(config$selenium$ecaps$prefs),
-          excludeSwitches = as.list(config$selenium$ecaps$excludeSwitches)
-        ),
-        timeout = 300
-      )
-
-      # retry scraping
-      rec <- .scrape_single_url(
-        db_file = db_file,
-        sid = sid,
-        url = u,
-        robots_check = robots_check
-      )
-
-      retries <- retries + 1
+    
+    if (is.na(rec$src) && isTRUE(config$selenium$use_selenium)) {
+      retry_queue <- c(retry_queue, u)
+      next 
     }
-
-    # data aggregation/checkpointing
-    if (is.null(out)) {
-      out <- data.table::copy(rec)
-    } else {
-      out <- data.table::rbindlist(list(out, rec), use.names = TRUE, fill = TRUE)
-    }
-
-    cat(sprintf("%s\t%d\t%s\n", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), chunk_id, u),
-        file = progress_file, append = TRUE
-    )
-
-    # snapshotting
-    if ((i %% snapshot_every) == 0L) {
-      .write_snapshot(dt = out, chunk_id = chunk_id, snapshot_dir = snapshot_dir)
-      p(amount = nrow(out), message = sprintf("Adding %d chunks", nrow(out)))
-      out <- out[0]
+    
+    .log_and_progress(p = p, u = u)
+    out <- data.table::rbindlist(list(out, rec), use.names = TRUE, fill = TRUE)
+    
+    if ((i %% snapshot_every) == 0L && !is.null(out)) {
+      out <- .write_snapshot(dt = out, chunk_id = chunk_id, snapshot_dir = snapshot_dir)
     }
   }
-
+  
+  # retry logic for initially failed urls (if any)
+  if (length(retry_queue) > 0 && !fs::file_exists(stop_file)) {
+    # try to create a new selenium-session for the retry queue
+    if ("SeleniumSession" %in% class(sid)) {
+      try(sid$close(), silent = TRUE)
+      sid <- .create_sid(cfg = config)
+    }
+    
+    if (!is.null(sid)) {
+      for (idx in seq_along(retry_queue)) {
+        if (fs::file_exists(stop_file)) break
+        u <- retry_queue[[idx]]
+        
+        success <- FALSE
+        for (attempt in 2:3) {
+          rec <- .scrape_single_url(
+            db_file = db_file, 
+            sid = sid, 
+            url = u, 
+            robots_check = robots_check
+          )
+          if (!is.na(rec$src)) { success <- TRUE; break }
+          Sys.sleep(1) 
+        }
+        
+        .log_and_progress(p = p, u = u, is_retry = TRUE, status = if(success) "OK" else "FAIL")
+        out <- data.table::rbindlist(list(out, rec), use.names = TRUE, fill = TRUE)
+        
+        # Snapshot check for long retry queues
+        if ((idx %% snapshot_every) == 0L && !is.null(out)) {
+          out <- .write_snapshot(dt = out, chunk_id = chunk_id, snapshot_dir = snapshot_dir)
+        }
+      }
+    }
+  }
+  
   # finalize
   if (!is.null(out) && nrow(out) > 0) {
     .write_snapshot(dt = out, chunk_id = chunk_id, snapshot_dir = snapshot_dir)
   }
-
+  
   invisible(TRUE)
 }
