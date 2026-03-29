@@ -114,50 +114,41 @@
 #' Worker Function for Batched URL Scraping
 #'
 #' This internal function orchestrates the scraping of multiple URLs in parallel
-#' processing contexts. It manages progress logging, snapshot creation, robots.txt
-#' validation, and stopping conditions.
+#' processing contexts. It manages progress logging, intermediate snapshot 
+#' creation, and multi-stage retry logic ("double-dipping") for failed URLs.
 #'
-#' @param inputs A named list containing:
-#' - **db_file**: Path to the DuckDB file used for robots.txt checks.
-#' - **urls**: Character vector of URLs to process in this worker.
-#' - **chunk_id**: Numeric identifier for this worker chunk.
-#' - **snapshot_every**: Integer: write snapshot files every N URLs.
-#' - **snapshot_dir**: Directory in which snapshot output is stored.
-#' - **stop_file**: Path to a file whose existence indicates that scraping should stop early.
-#' - **progress_dir**: Directory for storing progress logs.
-#' - **robots_check**: Logical indicating whether robots.txt rules should be evaluated.
-#' - **p**: A progress callback function accepting arguments `amount` and `message`.
-#' @param sid A Selenium session object or a list of HTTP headers, passed along to
-#'    `.scrape_single_url()`.
+#' @param urls A character vector of the URLs assigned to this specific worker chunk.
+#' @param chunk_id A numeric or character identifier for the current worker, used 
+#'   to organize log files and name snapshots.
+#' @param p A progressor function (from the `progressr` package) used to update 
+#'   the global progress bar.
+#' @param config A named list containing the scraping configuration, including:
+#'   - **db_file**: Path to the DuckDB file for robots.txt caching.
+#'   - **robots$check**: Logical; whether to respect robots.txt rules.
+#'   - **selenium**: A list containing Selenium settings (port, host, 
+#'     browser, and `snapshot_every`).
+#'   - **snapshot_dir**: Directory where `.rds` snapshots are saved.
+#'   - **stop_file**: Path to a file that, if created, signals the 
+#'     worker to terminate early.
+#'   - **progress_dir**: Directory where worker-specific progress 
+#'     logs are stored.
 #'
-#' @return Invisibly returns `TRUE` after completing all scraping tasks assigned to
-#'    this worker.
+#' @return Invisibly returns `TRUE` if the worker finishes successfully, 
+#'   or `FALSE` if a Selenium session could not be initialized.
 #'
 #' @details
-#' The function iterates over provided URLs, invoking `.scrape_single_url()` for each.
-#' Progress is logged to file, and optional snapshot files store intermediate results to
-#' safeguard against worker interruptions.
-#' When the stop file is detected, the worker terminates early.
-#' Any remaining un-snapshotted results are written at the end of execution.
+#' The function follows a two-pass execution strategy:
+#' 
+#' 1. **Main Loop**: Each URL is attempted once. If Selenium is enabled 
+#'    and a page fails to load (returning `NA`), the URL is added to a 
+#'    retry queue.
+#' 2. **Retry Loop**: After the primary loop, the Selenium session is 
+#'    refreshed, and failed URLs are attempted up to two more times.
+#' 
+#' Throughout both loops, the function periodically flushes data to disk via 
+#' `.write_snapshot()` based on the `snapshot_every` frequency defined 
+#' in the config.
 #'
-#' @examples
-#' \dontrun{
-#' # Inside a parallel worker
-#' .worker_scrape(
-#'   inputs = list(
-#'     db_file = "mydb.duckdb",
-#'     urls = c("https://example1.com", "https://example2.com"),
-#'     chunk_id = 1,
-#'     snapshot_every = 50,
-#'     snapshot_dir = "snapshots/",
-#'     stop_file = "stop.flag",
-#'     progress_dir = "progress/",
-#'     robots_check = TRUE,
-#'     p = function(amount, message) cat(amount, message, "\n")
-#'   ),
-#'   sid = my_selenium_session
-#' )
-#' }
 #' @keywords internal
 .worker_scrape <- function(urls, chunk_id, p, config) {
   # Safely create a Selenium Session

@@ -22,7 +22,6 @@
 #' @param doc A character string containing HTML or an `xml_document` object.
 #' @param baseurl Character string representing the URL from which the document
 #'   originated. Used to resolve relative links and filter domains.
-#'
 #' @return
 #' A `data.table` containing the following columns:
 #' * `href` – Cleaned and validated absolute URLs
