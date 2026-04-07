@@ -182,8 +182,8 @@
     
     # write to log
     status_suffix <- if (!is.null(status)) glue::glue("\tRETRY_{status}") else ""
-    glue::glue("{format(Sys.time())}\t{chunk_id}\t{u_str}{status_suffix}\n") |> 
-      cat(file = progress_file, append = TRUE)
+    glue::glue("{format(Sys.time())}\t{chunk_id}\t{u_str}{status_suffix}") |> 
+      cat(file = progress_file, append = TRUE, sep = "\n")
   }
   
   # setup vars
@@ -209,6 +209,7 @@
   
   out <- NULL
   retry_queue <- character()
+  restart_counter <- 0
   
   # main scraping loop; try every url once and move
   # failed urls to retry_queue
@@ -225,7 +226,21 @@
     
     if (is.na(rec$src) && isTRUE(config$selenium$use_selenium)) {
       retry_queue <- c(retry_queue, u)
+      restart_counter <- restart_counter + 1
       next 
+    }else{
+      restart_counter <- 0
+    }
+    
+    # check if scraping failed k times in a row
+    # then close and restart sid
+    if(restart_counter == 5 && "SeleniumSession" %in% class(sid) ){
+      # write to log-file
+      cat("Too many consecutive failures; restart Selenium Session!",
+          file = progress_file, append = TRUE, sep = "\n")
+      
+      try(sid$close(), silent = TRUE)
+      sid <- .create_sid(cfg = config)
     }
     
     .log_and_progress(p = p, u = u)
