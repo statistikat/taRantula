@@ -765,6 +765,7 @@ cfg_scraper <- R6::R6Class(
           verbose = FALSE,
           browser = "chrome",
           user_agent = .default_useragent(),
+          pageLoadStrategy = "eager",
           ecaps = list(
             args = c(
               "--headless",
@@ -775,14 +776,14 @@ cfg_scraper <- R6::R6Class(
               "--disable-infobars",
               "--disk-cache-size=400000000",
               "--disable-browser-side-navigation",
-              "--disable-blink-features",
+              "--disable-blink-features=AutomationControlled",
               "--window-size=1080,1920",
               "--disable-popup-blocking",
-              "--disable-dev-shm-usage",
-              "--lang=de"
+              "--lang=de",
+              "--proxy-server='direct://'",
+              "--proxy-bypass-list=*"              
             ),
             prefs = list(
-              PageLoadStrategy = "eager",
               `profile.default_content_settings.popups` = 0L
             ),
             excludeSwitches = c("disable-popup-blocking")
@@ -865,6 +866,13 @@ cfg_scraper <- R6::R6Class(
           x = sel$user_agent,
           nm = "sel$user_agent"
         )
+        
+        super$.req_string(
+          x = sel$pageLoadStrategy,
+          nm = "selenium$pageLoadStrategy",
+          allowed = c("normal", "eager", "none")
+        )
+        
         # ecaps
         super$.req_named_list(sel$ecaps, "selenium$ecaps")
 
