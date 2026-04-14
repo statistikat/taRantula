@@ -23,46 +23,55 @@ Before scraping, you need a running Selenium Grid. Using Docker is the recommend
 
 ### Docker-Compose Setup
 
-Save the following as `docker-compose.yaml` and run `docker-compose up -d`. This configuration is optimized for the memory demands of modern browsers.
+Save the following as `docker-compose.yaml` and run `docker-compose up -d`. This configuration is optimized for the memory demands of modern browsers. Depending on available resources, additional nodes may be added or the number of allowed sessions should be adjusted.
 
 ``` yaml
-version: "3"
 services:
   hub:
-  container_name: selenium-hub
-image: selenium/hub:4.8
-ports:
-  - 4442-4444:4442-4444
-networks:
-  - net-selenium-grid
-environment:
-  - NODE_MAX_INSTANCES=3
-  - NODE_MAX_SESSION=3
+    container_name: selenium-hub
+    image: selenium/hub:4.34.0
+    ports:
+      - 4442-4444:4442-4444
+    networks:
+      - tarantula-network
+    environment:
+      - SE_NODE_SESSION_TIMEOUT=600
+      - SE_SESSION_REQUEST_TIMEOUT=300
+      - SE_NODE_CONNECTION_TIMEOUT=60
+      - SE_NODE_READ_TIMEOUT=60
 
-node-chrome:
-  image: selenium/node-chrome:138.0
-  container_name: selenium-grid-chrome
-  depends_on:
-    - hub
-  networks:
-    - net-selenium-grid
-  environment:
-    - SE_EVENT_BUS_HOST=hub
-    - SE_EVENT_BUS_PUBLISH_PORT=4442
-    - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
-    - SE_NODE_OVERRIDE_MAX_SESSIONS=true
-    - SE_NODE_MAX_SESSIONS=3
-    - SE_ENABLE_BROWSER_LEFTOVERS_CLEANUP=true
-    - SE_BROWSER_LEFTOVERS_INTERVAL_SECS=600
-    - SE_BROWSER_LEFTOVERS_TEMPFILES_DAYS=2
-  shm_size: 2g
+  node-chrome-1:
+    image: selenium/node-chrome:138.0
+    container_name: selenium-grid-chrome-1
+    depends_on:
+      - hub
+    networks:
+      - tarantula-network
+    environment:
+      - SE_EVENT_BUS_HOST=hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_NODE_MAX_SESSIONS=3
+      - SE_ENABLE_BROWSER_LEFTOVERS_CLEANUP=true
+      - SE_BROWSER_LEFTOVERS_INTERVAL_SECS=600
+      - SE_BROWSER_LEFTOVERS_TEMPFILES_DAYS=2
+    shm_size: 2g
+    deploy:
+      resources:
+        limits:
+          cpus: '2.5'
+          memory: 6G
+        reservations:
+          cpus: '0.5'
+          memory: 2G
 
 networks:
-  net-selenium-grid:
+  tarantula-network:
   external: true
 ```
 
-***Note**:* Create the network first if needed: This can be achieved using command `docker network create net-selenium-grid`.
+***Note**:* Create the network first if needed: This can be achieved using command `docker network create tarantula-network`.
 
 ## Basic Workflow
 
