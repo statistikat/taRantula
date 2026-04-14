@@ -3,22 +3,22 @@
 #' @description
 #' Reads individual progress log files generated during scraping, parses
 #' their contents, and inserts the collected entries into the `logs` table
-#' of the DuckDB results database.  
+#' of the DuckDB results database.
 #' After successful insertion, processed log files are removed from the
 #' filesystem.
 #'
 #' @details
 #' The function performs the following actions:
 #'
-#' * Scans the `progress_dir` for log files created by parallel scraper workers  
+#' * Scans the `progress_dir` for log files created by parallel scraper workers
 #' * Parses each log file line‑by‑line, splitting entries into:
-#'   - timestamp  
-#'   - chunk/work‑unit identifier  
-#'   - URL currently being processed  
-#' * Converts parsed entries into a data frame suitable for database storage  
-#' * Inserts all log entries into the DuckDB `logs` table using  
-#'   `"INSERT OR IGNORE"` to avoid duplicates  
-#' * Removes successfully processed log files  
+#'   - timestamp
+#'   - chunk/work‑unit identifier
+#'   - URL currently being processed
+#' * Converts parsed entries into a data frame suitable for database storage
+#' * Inserts all log entries into the DuckDB `logs` table using
+#'   `"INSERT OR IGNORE"` to avoid duplicates
+#' * Removes successfully processed log files
 #'
 #' Log files are expected to contain tab‑separated entries created by worker
 #' processes. Files that are empty or unreadable are automatically discarded.
@@ -32,9 +32,9 @@
 #' corresponding files removed.
 #'
 #' @keywords internal
-#'
+#' @noRd
 #' @seealso
-#' * The `logs` table created in the scraper database structure  
+#' * The `logs` table created in the scraper database structure
 #' * Worker‑level logging functions within the scraper implementation
 .handle_logs <- function(progress_dir, db_file) {
   .parse_single_logfile <- function(p) {
@@ -64,6 +64,7 @@
   logs <- lapply(progress_files, function(x) {
     # Read progress lines
     lines <- readLines(x, warn = FALSE)
+    lines <- lines[!grepl("forcing new session", tolower(lines))]
     if (!length(lines)) {
       fs::file_delete(x)
       return(NULL)
@@ -86,7 +87,7 @@
 
   res <- tryCatch(
     # "Insert or ignore" does implicit deduplication
-    expr = DBI::dbWithTransaction(con, {
+    expr = DBI::dbWithTransaction(conn = con, code = {
       DBI::dbWriteTable(con, "tmp_logs", df, overwrite = TRUE)
       DBI::dbExecute(con, "INSERT OR IGNORE INTO logs SELECT * FROM tmp_logs")
       DBI::dbExecute(con, "DROP TABLE tmp_logs")
@@ -95,8 +96,7 @@
   )
 
   if (!inherits(res, "error")) {
-    # they are now successfully inserted
-    # into the database
+    # they are now successfully inserted into the database
     try(fs::file_delete(progress_files), silent = TRUE)
   }
   invisible(TRUE)
