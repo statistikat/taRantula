@@ -255,7 +255,7 @@ UrlScraper <- R6::R6Class(
               "jsonlite",
               "xml2",
               "rvest",
-              "httr",
+              "httr2",
               "robotstxt",
               "stats"
             )

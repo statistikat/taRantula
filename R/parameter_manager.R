@@ -646,7 +646,7 @@ paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
 #' parameters for a generic web scraper.
 #'
 #' It is designed for Selenium-based scraping workflows with integrated
-#' `robots.txt` checks and also supports `httr::GET()`-based scraping.
+#' `robots.txt` checks and also supports `httr2::request()`-based scraping.
 #'
 #' @section Main Responsibilities:
 #' * Define and expose sensible **default settings** for scraping projects
@@ -662,7 +662,7 @@ paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
 #' * `base_dir` – Base directory where project-related data are stored
 #' * `urls` – Character vector of URLs to be scraped
 #' * `robots` – List with `robots.txt`-related settings
-#' * `httr` – List of options for `httr::GET()` calls
+#' * `httr2` – List of options for `httr2::request()` calls
 #' * `selenium` – List with Selenium-related configuration
 #'
 #' See `defaults()` for the exact structure and default values.
@@ -707,7 +707,7 @@ cfg_scraper <- R6::R6Class(
     #'     - `workers` (integer): Number of parallel workers for robots checks; default `1`.
     #'     - `robots_user_agent` (character): User agent string for robots queries;
     #'       default `.default_useragent()`.
-    #'   * `httr` (list): Configuration for `httr::GET()`-based requests:
+    #'   * `httr2` (list): Configuration for `httr2::request()`-based requests:
     #'     - `user_agent` (character): User agent string; default `.default_useragent()`.
     #'   * `selenium` (list): Selenium-related configuration:
     #'     - `use_selenium` (logical): Use Selenium? Default `TRUE`.
@@ -755,7 +755,7 @@ cfg_scraper <- R6::R6Class(
           workers = 1L,
           robots_user_agent = .default_useragent()
         ),
-        httr = list(
+        httr2 = list(
           user_agent = .default_useragent() # default user agent
         ),
         selenium = list(
@@ -781,7 +781,7 @@ cfg_scraper <- R6::R6Class(
               "--disable-popup-blocking",
               "--lang=de",
               "--proxy-server='direct://'",
-              "--proxy-bypass-list=*"              
+              "--proxy-bypass-list=*"
             ),
             prefs = list(
               `profile.default_content_settings.popups` = 0L
@@ -829,15 +829,15 @@ cfg_scraper <- R6::R6Class(
           x = rob$robots_user_agent,
           nm = "robots$robots_user_agent"
         )
-      } else if (key == "httr") {
-        super$.req_named_list(value, "httr")
+      } else if (key == "httr2") {
+        super$.req_named_list(value, "httr2")
         # Provide defaults if user passes a partial list (for validation)
-        def <- self$defaults()$httr
-        httr_get <- utils::modifyList(def, value)
+        def <- self$defaults()$httr2
+        httr2_get <- utils::modifyList(def, value)
 
         super$.req_string(
-          x = httr_get$user_agent,
-          nm = "httr$user_agent"
+          x = httr2_get$user_agent,
+          nm = "httr2$user_agent"
         )
       } else if (key == "selenium") {
         super$.req_named_list(value, "selenium")
@@ -866,13 +866,13 @@ cfg_scraper <- R6::R6Class(
           x = sel$user_agent,
           nm = "sel$user_agent"
         )
-        
+
         super$.req_string(
           x = sel$pageLoadStrategy,
           nm = "selenium$pageLoadStrategy",
           allowed = c("normal", "eager", "none")
         )
-        
+
         # ecaps
         super$.req_named_list(sel$ecaps, "selenium$ecaps")
 

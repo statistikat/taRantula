@@ -157,7 +157,7 @@ s <- UrlScraper$new(cfg)
 s$scrape()
 ```
 
-### Scraping Engines: Selenium vs. httr
+### Scraping Engines: Selenium vs. httr2
 
 The `scrape()` implementation is engine-agnostic. It detects whether the session is a full browser or a set of HTTP headers and adjusts its strategy accordingly.
 
@@ -167,17 +167,17 @@ By default, the scraper expects a **Selenium Grid** to work with. This is necess
 * **Redirect Detection**: The scraper automatically detects if a URL redirects (e.g., from `http` to `https`) and stores the `url_redirect` pointer in the database.
 * **Content Persistence**: The full rendered HTML source is captured after the DOM has stabilized.
 
-#### httr Fallback (High Speed)
-If you disable Selenium, the scraper falls back to `httr::GET()`. This is significantly faster and uses fewer resources but does not allow to catch dynamically rendered content.
+#### httr2 Fallback (High Speed)
+If you disable Selenium, the scraper falls back to `httr2::request()`. This is significantly faster and uses fewer resources but does not allow to catch dynamically rendered content.
 
 * **When to use**: For static sites or APIs where JavaScript rendering is not required.
 * **Custom Headers**: In this mode, the scraper passes your configured user-agent and metadata via HTTP headers.
 
 ```{r engine-toggle}
-# To disable Selenium and use the httr fallback:
+# To disable Selenium and use the httr2 fallback:
 cfg$set("selenium$use_selenium", FALSE)
 
-# The same UrlScraper$new(cfg) will now use httr internally
+# The same UrlScraper$new(cfg) will now use httr2 internally
 ```
 
 

@@ -8,7 +8,7 @@
 #' @param db_file Character string specifying the path to the DuckDB database file
 #'    used for robots.txt rule evaluation.
 #' @param sid Either a Selenium session object (`SeleniumSession`) or a named list of
-#'    HTTP headers to be used with `httr::GET()`.
+#'    HTTP headers to be used with `httr2::request()`.
 #' @param url Character string containing the URL to be scraped.
 #' @param robots_check Logical indicating whether robots.txt rules should be validated
 #'    before scraping.
@@ -76,8 +76,11 @@
         url <- current_url
         html_source <- sid$get_page_source()
       } else {
-        html_source <- httr::GET(url = url, httr::add_headers(.headers = sid))
-        html_source <- httr::content(html_source, as = "text")
+        req <- httr2::request(url)
+        req <- httr2::req_method(req, "GET")
+        req <- httr2::req_headers(req, !!!sid)
+        resp <- httr2::req_perform(req)
+        html_source <- httr2::resp_body_string(resp)
         url_redirect <- NA_character_
       }
 
@@ -168,7 +171,7 @@
   # Safely create a Selenium Session
   .create_sid <- function(cfg, timeout = 300) {
     if (!isTRUE(cfg$selenium$use_selenium)) {
-      return(c(user_agent = cfg$httr$user_agent))
+      return(c(user_agent = cfg$httr2$user_agent))
     }
     tryCatch(
       expr = {

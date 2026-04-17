@@ -2,21 +2,21 @@
 #'
 #' @description
 #' Internal utility that prepares and normalizes the configuration list used by
-#' the `UrlScraper` class.  
+#' the `UrlScraper` class.
 #' This includes creating required directories, setting file paths, determining
 #' pending URLs, and applying global options needed during scraping.
 #'
 #' @details
 #' The function performs the following steps:
 #'
-#' * Validates that the provided configuration object is a `cfg_scraper` instance  
-#' * Constructs the project directory under `base_dir`  
+#' * Validates that the provided configuration object is a `cfg_scraper` instance
+#' * Constructs the project directory under `base_dir`
 #' * Creates required subfolders for snapshots, progress files, and the DuckDB
-#'   database  
-#' * Initializes the URL queue (`urls_todo`) and marks none as scraped initially  
+#'   database
+#' * Initializes the URL queue (`urls_todo`) and marks none as scraped initially
 #' * If an existing DuckDB file is found, previously scraped URLs are loaded and
-#'   removed from the queue  
-#' * Stores the current global R options and applies scraper‑specific defaults  
+#'   removed from the queue
+#' * Stores the current global R options and applies scraper‑specific defaults
 #'
 #' This function is called automatically inside the `UrlScraper` constructor and
 #' should not be used directly.
@@ -25,11 +25,11 @@
 #'
 #' @return
 #' A normalized configuration list ready for use by the scraping engine.
-#' 
+#'
 #' @keywords internal
 #'
 #' @seealso [cfg_scraper], [UrlScraper]
-#' 
+#'
 .initialize <- function(config) {
   stopifnot(inherits(config, "cfg_scraper"))
   config <- config$show_config()
@@ -58,13 +58,13 @@
     if (nrow(urls_scraped) == 0) {
       urls_scraped <- NULL
     }
-  }  
+  }
   # drop duplicated URLs in $urls_todo
   config$urls_todo <- .filter_new_urls(
     urls_scraped = urls_scraped,
     urls_new = config$urls_todo
   )
-  
+
   config$saved_options <- options()
   options(datatable.prettyprint.char = 50)
   return(config)
@@ -73,21 +73,21 @@
 #' @title Initialize DuckDB Storage Structure
 #'
 #' @description
-#' Creates the internal DuckDB storage schema if it does not yet exist.  
+#' Creates the internal DuckDB storage schema if it does not yet exist.
 #' Required directories are created and tables for results, links, logs, and
 #' robots‑permissions are initialized.
 #'
 #' @details
 #' When a DuckDB database already exists, this function performs no destructive
-#' actions and simply returns.  
+#' actions and simply returns.
 #' Otherwise, it:
 #'
-#' * Connects to the DuckDB file  
+#' * Connects to the DuckDB file
 #' * Creates four tables (if not already present):
-#'   - **results** – scraped pages with status, HTML, timestamps  
-#'   - **links** – extracted hyperlinks with labels and metadata  
-#'   - **logs** – progress tracking entries  
-#'   - **robots** – stored robots.txt permissions for visited domains  
+#'   - **results** – scraped pages with status, HTML, timestamps
+#'   - **links** – extracted hyperlinks with labels and metadata
+#'   - **logs** – progress tracking entries
+#'   - **robots** – stored robots.txt permissions for visited domains
 #'
 #' All table definitions include primary keys to ensure data integrity.
 #'
@@ -178,7 +178,7 @@
 #'
 #' @description
 #' Provides a default desktop Safari‑style user‑agent string for both Selenium
-#' and `httr` requests when no custom value is supplied.
+#' and `httr2` requests when no custom value is supplied.
 #'
 #' @details
 #' The user‑agent string is chosen to mimic a typical macOS Safari browser
