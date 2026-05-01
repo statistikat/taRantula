@@ -131,10 +131,6 @@ runGoogleSearch(
 )
 ```
 
-
-
-
-    
 ## Scraping
 
 ### Configuration 
@@ -180,7 +176,6 @@ cfg$set("selenium$use_selenium", FALSE)
 # The same UrlScraper$new(cfg) will now use httr2 internally
 ```
 
-
 ### Fault Tolerance and Progress Protection
 
 One of the core strengths of `taRantula` is its resilience. Scraping thousands of URLs is prone to interruptions (network timeouts, hardware crashes, or OS updates).
@@ -191,22 +186,29 @@ The configuration includes a `snapshot_every` parameter (default is 10).
 
 **How it works:** Every N URLs, each worker writes its current progress to a temporary "snapshot" file in the project directory.
 
-**Crash Recovery:** If the R session or the Selenium server crashes, simply re-initialize the `UrlScraper` with the same configuration. On startup, the class detects these snapshots and the existing DuckDB database.
+**Crash Recovery:** If the `R` session or the Selenium server crashes, simply re-initialize the `UrlScraper` with the same configuration. On startup, the class detects these snapshots and the existing DuckDB database.
 
 **Persistence:** Only the URLs processed since the *last* snapshot are lost, ensuring that 99% of your progress is usually preserved.
 
 ### Data Extraction and Iteration
 
-Data is persisted in `DuckDB`, meaning you can access it via helper methods or raw SQL.
+Data is managed through a hybrid architecture: metadata is stored directly in **DuckDB**, while raw HTML content (`src`) is archived in highly compressed **Parquet** files.
+
+The `$results()` method abstracts this complexity by automatically joining metadata with the corresponding Parquet archives. For large datasets, you can toggle the `with_src` parameter to choose between high-performance metadata analysis and full-content extraction.
 
 ```{r extraction}
-# Access results as a data.table
+# By default: Access results as a data.table, including the HTML source code.
+# Note: This performs an on-the-fly join with the Parquet archive.
 results_dt <- s$results()
 
-# Access all discovered links
+# Access metadata only. 
+# This is significantly faster for filtering or summary statistics.
+results_meta <- s$results(with_src = FALSE)
+
+# Access all discovered links from the link graph
 links_dt <- s$links()
 
-# Inspect logs for errors or redirects
+# Inspect execution logs for progress tracking and redirects
 logs_dt <- s$logs()
 ```
 

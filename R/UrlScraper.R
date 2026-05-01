@@ -1,20 +1,21 @@
 #' @title UrlScraper R6 Class for Parallel Web Scraping with Selenium
 #'
 #' @description
-#' The `UrlScraper` R6 class provides a high‑level framework for scraping
-#' a list of URLs using multiple parallel Selenium (or non‑Selenium) workers.
-#' It manages scraping state, progress, snapshots, logs, and respects
-#' `robots.txt` rules. Results and logs are stored in an internal DuckDB
-#' database.
+#' The `UrlScraper` R6 class provides a framework for scraping lists of URLs
+#' using multiple parallel Selenium (or httr2-Fallback) workers. It manages the scraping state,
+#' progress, snapshots, and logs, while ensuring `robots.txt` rules are followed.
+#' Metadata and logs are stored in an internal DuckDB database, while
+#' the scraped HTML sources are saved in compressed `parquet` files.
 #'
 #' @section Overview:
-#' The `UrlScraper` class is designed for robust, resumable web scraping
-#' workflows. Its key features include:
+#' The `UrlScraper` class is designed for robust and resumable web scraping.
+#' Its key features include:
 #'
 #' * Parallel scraping of URLs via multiple Selenium workers
-#' * Persistent storage of results, logs, and extracted links in DuckDB
-#' * Automatic snapshotting and recovery of partially processed chunks
-#' * Respecting `robots.txt` rules via pre‑checks on domains
+#' * Persistent storage of results and links in DuckDB
+#' * Efficient storage of HTML sources in compressed `parquet` files
+#' * Automatic snapshotting and recovery of processed chunks
+#' * Respecting `robots.txt` rules per domain
 #' * Convenience helpers for querying results, logs, and extracted links
 #' * Regex‑based extraction of text from previously scraped HTML
 #'
@@ -46,7 +47,7 @@
 #' * `initialize(config)` – create a new `UrlScraper` instance
 #' * `scrape()` – scrape all remaining URLs in parallel
 #' * `update_urls(urls, force = FALSE)` – add new URLs to the queue
-#' * `results(filter = NULL)` – extract scraping results
+#' * `results(filter = NULL, with_src = TRUE)` – extract scraping results with/without sources
 #' * `logs(filter = NULL)` – extract log entries
 #' * `links(filter = NULL)` – extract discovered links
 #' * `query(q)` – run custom SQL queries on the internal DuckDB database
@@ -77,7 +78,8 @@
 #' scraper$scrape()
 #'
 #' # Retrieve results as a data.table
-#' results_dt <- scraper$results()
+#' results_dt <- scraper$results() # per default with sources
+#' scraper$results(with_src = FALSE) # only metadata and path to result-files
 #'
 #' # Retrieve logs and links
 #' logs_dt <- scraper$logs()
@@ -336,7 +338,6 @@ UrlScraper <- R6::R6Class(
           "Elapsed: {.fmt(elapsed)}s"
         ))
       )
-
       invisible(self)
     },
 
@@ -415,10 +416,13 @@ UrlScraper <- R6::R6Class(
     #'   condition (without the `WHERE` keyword), e.g.
     #'   `"url LIKE 'https://example.com/%'"`. If `NULL` (default), all rows
     #'   from the `results` table are returned.
-    #'
+    #' @param with_src (Logical); if `TRUE` (default), the result also contains
+    #' the scraped sources (column `src`) of the scraped websites; else in column `file_path` the
+    #' path to the local `parquet` Files, in which results are returned.
     #' @return A `data.table` containing the scraping results.
-    results = function(filter = NULL) {
-      private$extract_results(tab = "results", filter = filter)
+    results = function(filter = NULL, with_src = TRUE) {
+      tab <- ifelse(with_src, "full_results", "results")
+      private$extract_results(tab = tab, filter = filter)
     },
 
     #' @description
@@ -570,9 +574,13 @@ UrlScraper <- R6::R6Class(
           if (fs::dir_exists(private$config$snapshot_dir)) {
             fs::dir_delete(private$config$snapshot_dir)
           }
+          if (fs::dir_exists(private$config$progress_dir)) {
+            fs::dir_delete(private$config$progress_dir)
+          }
         },
         silent = TRUE
       )
+
       con <- self$.__enclos_env__$private$config$conn
       if (!is.null(con)) {
         try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
@@ -660,7 +668,7 @@ UrlScraper <- R6::R6Class(
 
       results_docs <- .extract_results(
         db_file = private$config$db_file,
-        tab = "results",
+        tab = "full_results",
         filter = NULL
       )
 

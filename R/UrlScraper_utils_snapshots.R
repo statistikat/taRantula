@@ -59,6 +59,8 @@
 #' @keywords internal
 #' @noRd
 .handle_snapshots <- function(snapshot_dir, db_file) {
+  . <- scraped_at <- src <- url_redirect <- status <- NULL
+
   snaps <- fs::dir_ls(
     path = snapshot_dir,
     regexp = "snap_.*\\.rds$",
@@ -72,9 +74,11 @@
     return(invisible(NULL))
   }
 
+  parquet_dir <- .parquet_data_dir(snapshot_dir)
+
   # Connect to DB
-  con <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = FALSE))
-  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  conn <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = FALSE))
+  on.exit(DBI::dbDisconnect(conn, shutdown = TRUE), add = TRUE)
 
   # Split files into batches
   snap_groups <- split(snaps, ceiling(seq_along(snaps) / batch_size))
@@ -102,27 +106,47 @@
           raw_data, `[[`, "content"
         ))
         batch_links <- data.table::rbindlist(lapply(raw_data, `[[`, "links"))
-        rm(raw_data)
-        gc()
 
-        DBI::dbWithTransaction(con, {
+        parquet_filename <- sprintf("batch_%s.parquet", format(Sys.time(), "%Y%m%d_%H%M%S_%s"))
+        parquet_path <- fs::path(parquet_dir, parquet_filename)
+
+        # Write Url, Timestamp and scraped Source compressed as Parquet-Files
+        arrow::write_parquet(
+          x = batch_content[, .(url, scraped_at, src)],
+          sink = parquet_path,
+          compression = "zstd"
+        )
+
+        # Update View
+        .setup_full_results_view(conn, snapshot_dir)
+
+        # Prepare content for "results" table (only Metadata, no Src!)
+        meta_content <- batch_content[, .(
+          url,
+          url_redirect,
+          status,
+          file_path = parquet_path,
+          scraped_at
+        )]
+
+        DBI::dbWithTransaction(conn, {
           # Write Content
           DBI::dbWriteTable(
-            conn = con,
+            conn = conn,
             name = "tmp_content",
-            value = batch_content,
+            value = meta_content,
             overwrite = TRUE,
             temporary = TRUE
           )
           DBI::dbExecute(
-            conn = con,
+            conn = conn,
             statement = "INSERT OR REPLACE INTO results SELECT * FROM tmp_content"
           )
 
           if (nrow(batch_links) > 0) {
             # Add links to temporary table
             DBI::dbWriteTable(
-              conn = con,
+              conn = conn,
               name = "tmp_links_raw",
               value = batch_links,
               overwrite = TRUE,
@@ -131,7 +155,7 @@
 
             # Compute level in SQL (faster than in R)
             DBI::dbExecute(
-              conn = con,
+              conn = conn,
               statement = "
               INSERT INTO links (href, label, source_url, level, scraped_at)
               SELECT
@@ -151,12 +175,12 @@
           }
 
           # Cleanup
-          DBI::dbExecute(conn = con, statement = "DROP TABLE IF EXISTS tmp_content")
-          DBI::dbExecute(conn = con, statement = "DROP TABLE IF EXISTS tmp_links_raw")
+          DBI::dbExecute(conn = conn, statement = "DROP TABLE IF EXISTS tmp_content")
+          DBI::dbExecute(conn = conn, statement = "DROP TABLE IF EXISTS tmp_links_raw")
         })
 
         fs::file_delete(group)
-        TRUE
+        return(TRUE)
       },
       error = function(e) {
         cli::cli_alert_danger(

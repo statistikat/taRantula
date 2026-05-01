@@ -2,33 +2,34 @@
 #'
 #' @description
 #' Retrieves records from one of the internal DuckDB tables used by the
-#' `UrlScraper` framework.  
+#' `UrlScraper` framework.
 #' Supported tables include:
-#' * `"results"` – scraped HTML documents  
-#' * `"logs"` – worker progress log entries  
-#' * `"links"` – extracted hyperlinks  
+#' * `"full_results"` – full available Metadata and scraped sources
+#' * `"results"` – Metadata about Scraping process (without actual source codes)
+#' * `"logs"` – worker progress log entries
+#' * `"links"` – extracted hyperlinks
 #'
 #' Optional SQL-style filtering is supported (e.g., `"url LIKE 'https://example.com/%'"`).
 #'
 #' @details
 #' This helper function:
-#' * Connects to the DuckDB database in **read‑only** mode  
-#' * Validates the requested table name  
-#' * Constructs a `SELECT * FROM <table>` query, optionally with a `WHERE` clause  
-#' * Returns results as a `data.table`  
+#' * Connects to the DuckDB database in **read‑only** mode
+#' * Validates the requested table name
+#' * Constructs a `SELECT * FROM <table>` query, optionally with a `WHERE` clause
+#' * Returns results as a `data.table`
 #'
 #' If the underlying query fails (often due to malformed filters),
 #' an informative message is printed and `NULL` is returned invisibly.
 #'
 #' @param db_file Path to the DuckDB file created by the scraper.
 #' @param tab Character scalar specifying the table to query.
-#'   Must be one of `"results"`, `"logs"`, or `"links"`.
+#'   Must be one of `"full_results"`, `"results"`, `"logs"`, or `"links"`.
 #' @param filter Optional SQL `WHERE` clause (without the word `WHERE`) used
 #'   to subset the results.
 #'
 #' @return
 #' A `data.table` containing all rows from the selected table, optionally
-#' filtered.  
+#' filtered.
 #' Returns `NULL` invisibly if the query fails.
 #'
 #' @keywords internal
@@ -40,10 +41,10 @@
 #'
 #' ## Extract links from a specific domain:
 #' .extract_results("results.duckdb", tab = "links",
-#'                   filter = "href LIKE 'https://example.com/%'")
+#'   filter = "href LIKE 'https://example.com/%'")
 #' }
-.extract_results <- function(db_file, tab = "results", filter) {
-  stopifnot(rlang::is_scalar_character(tab), tab %in% c("results", "logs", "links"))
+.extract_results <- function(db_file, tab = "full_results", filter) {
+  stopifnot(rlang::is_scalar_character(tab), tab %in% c("results", "full_results", "logs", "links"))
   stopifnot(fs::file_exists(db_file))
 
   if (!is.null(filter)) {
@@ -73,7 +74,6 @@
   return(res)
 }
 
-
 #' @title Execute Arbitrary SQL Query on DuckDB
 #'
 #' @description
@@ -83,12 +83,12 @@
 #'
 #' @details
 #' The function:
-#' * Validates that the DuckDB file exists  
-#' * Executes the provided SQL in **read‑only** mode  
-#' * Converts the result to a `data.table`  
-#' * Returns `NULL` invisibly if the query fails  
+#' * Validates that the DuckDB file exists
+#' * Executes the provided SQL in **read‑only** mode
+#' * Converts the result to a `data.table`
+#' * Returns `NULL` invisibly if the query fails
 #'
-#' This is a low‑level function intended for power users.  
+#' This is a low‑level function intended for power users.
 #' Users must ensure their SQL queries are syntactically valid.
 #'
 #' @param db_file Path to the DuckDB database file.
@@ -106,7 +106,7 @@
 #'
 #' ## Count pages scraped successfully:
 #' .extract_query("results.duckdb",
-#'                "SELECT COUNT(*) FROM results WHERE status = TRUE")
+#'   "SELECT COUNT(*) FROM results WHERE status = TRUE")
 #' }
 .extract_query <- function(db_file, query) {
   stopifnot(fs::file_exists(db_file))
