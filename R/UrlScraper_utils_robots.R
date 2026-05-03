@@ -1,218 +1,113 @@
-#' Retrieve and Store robots.txt Information in a DuckDB Database
+#' Retrieve robots.txt and filter results table
 #'
-#' @description
-#' Retrieves **robots.txt** files for a set of domains, parses their permissions,
-#' and stores them in a DuckDB table named `"robots"`.  
-#' Existing entries are not overwritten. Domains for which no valid
-#' `robots.txt` can be retrieved are stored with empty permissions, implying
-#' fully permissive access.
+#' Fetches robots.txt files for new domains and validates pending URLs against
+#' the retrieved access rules.
 #'
-#' @details
-#' The function processes domains in parallel, retrieves their
-#' `robots.txt` rules, and stores them in chunks to improve efficiency.
-#' It automatically detects which domains are already present in the database
-#' and only processes the missing ones.
+#' This function identifies domains in the results table that require `robots.txt`
+#' validation. It processes these domains in parallel to fetch access rules,
+#' stores them in the database, and performs a bulk validation of all pending
+#' URLs. The function ensures the database remains synchronized with access
+#' policies without redundant network requests.
 #'
-#' The stored permissions can later be queried using [query_robotsdata()].
+#' @param db_file Character path to the DuckDB database file.
+#' @param robots_config List containing configuration settings. Example:
+#' \preformatted{
+#'   # Extracting configuration from the parameter manager
+#'   cfg <- paramsScraper()
+#'   robots_config <- cfg$get("robots")
 #'
-#' @param db_file `character(1)`  
-#'   Path to the DuckDB database file.
-#' @param snapshot_every `integer(1)`  
-#'   Number of domains to process per chunk.
-#' @param workers `integer(1)`  
-#'   Number of worker processes used for parallel retrieval.
-#' @param urls `character`  
-#'   Vector of URLs from which the corresponding domains will be extracted.
-#' @param user_agent `character(1)`  
-#'   Optional user agent string passed to `robotstxt::robotstxt()`.
-#'
-#' @return
-#' Invisibly returns `NULL`.  
-#' Side effect: updates (or creates) table `"robots"` in the supplied DuckDB file.
-#'
-#' @examples
-#' \dontrun{
-#' db <- "robots.duckdb"
-#' urls <- c("https://example.com", "https://r-project.org")
-#' .handle_robots(db_file = db, snapshot_every = 10, workers = 2, urls = urls)
+#'   # Adjusting parameters for the worker
+#'   robots_config$workers <- 5
 #' }
 #'
-#' @seealso
-#' * [query_robotsdata()]  
-#' * [check_robotsdata()]
+#' @return Invisibly returns NULL. Updates the robots table with new rules and
+#' modifies the robotscheck_allowed flag in the results table.
+#'
 #' @keywords internal
-.handle_robots <- function(db_file,
-                           snapshot_every,
-                           workers,
-                           urls,
-                           user_agent = NULL) {
-  # make use of existing db-connection
-  .insert_chunk_to_db <- function(conn, res) {
-    stopifnot(inherits(conn, "duckdb_connection"))
-    df <- do.call("rbind", res)
-    n <- nrow(df)
-    sql_values <- paste(rep("(?, ?)", n), collapse = ", ")
-    sql_insert <- glue::glue("INSERT OR IGNORE INTO {tab} (domain, permissions) VALUES {sql_values}")
-    params <- as.list(as.vector(t(df)))
+#' @noRd
+.handle_robots <- function(db_file, robots_config) {
+  snapshot_every <- robots_config$snapshot_every
+  workers <- robots_config$workers
+  check <- robots_config$check
+  user_agent <- robots_config$robots_user_agent
 
-    DBI::dbExecute(conn = conn, sql_insert, params = params)
-    return(invisible(NULL))
-  }
+  conn <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = FALSE))
+  on.exit(DBI::dbDisconnect(conn, shutdown = TRUE), add = TRUE)
 
-  domains <- get_domain(
-    x = unique(urls),
-    include_scheme = TRUE
-  )
+  # Retrieve domains requiring processing
+  todo_data <- DBI::dbGetQuery(conn, sql_queries$get_todo_urls)
+  if (nrow(todo_data) == 0) return(invisible(NULL))
 
-  # query db which domains are not yet listed:
-  conn <- DBI::dbConnect(drv = duckdb::duckdb(db_file, read_only = FALSE))
-  on.exit(try(DBI::dbDisconnect(conn, shutdown = TRUE), silent = TRUE), add = TRUE)
+  todo_data$domain <- get_domain(todo_data$url, include_scheme = TRUE)
+  unique_domains <- unique(todo_data$domain)
 
-  tab <- "robots"
-  ex_domains <- DBI::dbGetQuery(
-    conn = conn,
-    statement = glue::glue("select distinct(domain) from {tab}")
-  )[[1]]
+  # Determine which domains do not have existing robots data
+  ex_domains <- DBI::dbGetQuery(conn, sql_queries$get_robots_existing)[[1]]
+  domains_to_process <- setdiff(unique_domains, ex_domains)
 
-  if (length(ex_domains) > 0) {
-    cli::cli_alert_info(
-      text = glue::glue("found robots-data for {length(ex_domains)} domains")
-    )
-  }
-
-  domains <- setdiff(domains, ex_domains)
-  if (length(domains) == 0) {
-    cli::cli_alert_success(
-      text = "robots-data already available."
-    )
-    return(invisible(NULL))
-  }
-
-  cli::cli_alert_info(text = glue::glue("retrieving robots-data for {length(domains)} domains"))
-
-  # Setup parallelized robots-retrieval
+  # Setup parallel execution
   oplan <- future::plan()
   on.exit(future::plan(oplan), add = TRUE)
   future::plan(strategy = future::multisession, workers = workers)
 
-  # chunk-size
-  chunks <- split(x = domains, f = ceiling(seq_along(domains) / snapshot_every))
+  # Retrieve and store robots.txt for new domains
+  if (length(domains_to_process) > 0) {
+    cli::cli_alert_info("Retrieving robots.txt for new domains with {workers} workers")
+    chunks <- split(domains_to_process, f = ceiling(seq_along(domains_to_process) / snapshot_every))
 
-  p <- progressr::progressor(steps = length(chunks), auto_finish = TRUE)
-  for (i in seq_along(chunks)) {
-    chunk <- chunks[[i]]
-    # Fetch robots.txt in parallel
-    res <- future.apply::future_lapply(chunk, function(x, user_agent) {
-      tryCatch(
-        expr = {
-          rt <- robotstxt::robotstxt(
-            domain = x,
-            user_agent = user_agent,
-            force = TRUE,
-            warn = FALSE
-          )
-          data.frame(domain = x, permissions = as.character(rt$text))
-        },
-        error = function(e) {
-          # print(e)
-          data.frame(domain = x, permissions = "")
-        }
-      )
-    }, user_agent = user_agent, future.seed = TRUE, future.packages = c("robotstxt"))
+    for (chunk in chunks) {
+      res <- future.apply::future_lapply(chunk, function(d) {
+        rt <- tryCatch(
+          expr = {
+            robotstxt::robotstxt(
+              domain = d,
+              user_agent = robots_config$user_agent,
+              warn = FALSE, force = TRUE
+            )
+          }, error = function(e) NULL
+        )
+        data.frame(domain = d, permissions = if (!is.null(rt)) as.character(rt$text) else "")
+      }, future.seed = TRUE, future.packages = "robotstxt")
 
-    # insert chunk-data in db
-    .insert_chunk_to_db(conn = conn, res = res)
-    p(message = glue::glue("Added {length(res)} robots-data entries"))
+      df <- do.call(rbind, res)
+      DBI::dbWriteTable(conn, "robots", df, append = TRUE)
+    }
   }
-  cli::cli_alert_success(
-    text = "required robots-data successfully retrieved."
-  )
+
+  # Load stored rules for validation
+  robots_data <- DBI::dbGetQuery(conn, sql_queries$get_robots_todo)
+
+  cli::cli_alert_info("Validating URLs against robots.txt rules")
+
+  # Reset validation flags before re-evaluation
+  DBI::dbExecute(conn, sql_queries$reset_robots_flags)
+
+  # Query permissions for each domain
+  blocked_urls <- c()
+  for (i in seq_len(nrow(robots_data))) {
+    d <- robots_data$domain[i]
+    rt <- robotstxt::robotstxt(domain = d, text = robots_data$permissions[i])
+    urls_to_check <- todo_data$url[todo_data$domain == d]
+    is_allowed <- sapply(urls_to_check, function(u) rt$check(u, bot = "*"))
+
+    if (any(!is_allowed)) {
+      blocked_urls <- c(blocked_urls, urls_to_check[!is_allowed])
+    }
+  }
+
+  # Update database flags for blocked content due to robots.txt
+  if (length(blocked_urls) > 0) {
+    placeholders <- paste(rep("?", length(blocked_urls)), collapse = ",")
+    query <- glue::glue(sql_queries$update_robots_allowed, placeholders = placeholders)
+    DBI::dbExecute(conn, query, params = as.list(blocked_urls))
+  }
+
+  # Apply configuration-based status updates
+  if (isTRUE(robots_config$check)) {
+    DBI::dbExecute(conn, sql_queries$status_update_blocked)
+  } else {
+    DBI::dbExecute(conn, sql_queries$status_update_todo)
+  }
+
   return(invisible(NULL))
-}
-
-#' Query Stored robots.txt Permissions for a Given URL
-#'
-#' @description
-#' Retrieves the stored robots.txt permissions for the domain of the given URL
-#' from a DuckDB database and returns them as a `robotstxt` object.
-#'
-#' @details
-#' If the domain does not exist in the `"robots"` table, the function returns
-#' a `robotstxt` object with empty permissions, implying full access.
-#'
-#' @param db_file `character(1)`  
-#'   Path to the DuckDB database file.
-#' @param url `character(1)`  
-#'   URL for which the stored robots.txt information should be retrieved.
-#'
-#' @return
-#' A `robotstxt` object from the **robotstxt** package.
-#'
-#' @examples
-#' \dontrun{
-#' query_robotsdata("robots.duckdb", "https://example.com/page")
-#' }
-#'
-#' @seealso
-#' * [check_robotsdata()]
-#' @keywords internal
-query_robotsdata <- function(db_file, url) {
-  stopifnot(rlang::is_scalar_character(db_file))
-  stopifnot(rlang::is_scalar_character(url))
-
-  domain <- get_domain(url, include_scheme = TRUE)
-  conn <- DBI::dbConnect(
-    drv = duckdb::duckdb(db_file, read_only = TRUE)
-  )
-  on.exit(try(DBI::dbDisconnect(conn, shutdown = TRUE), silent = TRUE), add = TRUE)
-  tab <- "robots"
-  df <- DBI::dbGetQuery(
-    conn = conn,
-    statement = glue::glue("SELECT * FROM {tab} where domain = {shQuote(domain)}")
-  )
-
-  if (nrow(df) == 0) {
-    df <- data.frame(domain = domain, permissions = "")
-  }
-  rtxt <- robotstxt::robotstxt(domain = df$domain, text = df$permissions)
-  return(rtxt)
-}
-
-#' Check Whether a URL Is Allowed According to Stored robots.txt Rules
-#'
-#' @description
-#' Determines whether a URL is permitted to be scraped according to the
-#' `robots.txt` rules stored in a DuckDB `"robots"` table.
-#'
-#' @details
-#' Internally calls [query_robotsdata()] and evaluates permissions via
-#' `robotstxt::paths_allowed()`.  
-#' If no valid robots.txt information is available for the domain, the function
-#' returns `TRUE` (i.e., scraping is allowed).
-#'
-#' @param db_file `character(1)`  
-#'   Path to the DuckDB database file.
-#' @param url `character(1)`  
-#'   URL to evaluate.
-#'
-#' @return
-#' `TRUE` if scraping the URL is allowed, `FALSE` otherwise.
-#'
-#' @examples
-#' \dontrun{
-#' check_robotsdata("robots.duckdb", "https://example.com/secret")
-#' }
-#'
-#' @seealso
-#' * [query_robotsdata()]
-#' @keywords internal
-check_robotsdata <- function(db_file, url) {
-  rtxt <- query_robotsdata(db_file = db_file, url = url)
-
-  if (is.na(rtxt$domain)) {
-    # rtxt does not exist or is not valid
-    return(TRUE)
-  }
-  allowed <- rtxt$check(url, bot = "*")
-  return(allowed)
 }

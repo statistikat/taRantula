@@ -146,6 +146,9 @@ cfg$set("selenium$host", "localhost")
 cfg$set("selenium$workers", 3)
 cfg$set("urls", c("https://nytimes.com", "https://whitehouse.gov"))
 
+# Number of workers for robots.txt detection
+cfg$set("robots$workers", 4)
+
 # Initialize the scraper
 s <- UrlScraper$new(cfg)
 
@@ -155,12 +158,13 @@ s$scrape()
 
 ### Scraping Engines: Selenium vs. httr2
 
-The `scrape()` implementation is engine-agnostic. It detects whether the session is a full browser or a set of HTTP headers and adjusts its strategy accordingly.
+The `scrape()` function supports two engines: Selenium for dynamic content and `httr2` for static web requests. By default, the package uses Selenium. You can switch to `httr2` by setting the configuration parameter `cfg$set("selenium$use_selenium", FALSE)`.
 
 #### Selenium Mode (JavaScript Support)
 By default, the scraper expects a **Selenium Grid** to work with. This is necessary for modern websites that require JavaScript to render content.
 
 * **Redirect Detection**: The scraper automatically detects if a URL redirects (e.g., from `http` to `https`) and stores the `url_redirect` pointer in the database.
+
 * **Content Persistence**: The full rendered HTML source is captured after the DOM has stabilized.
 
 #### httr2 Fallback (High Speed)
@@ -178,23 +182,23 @@ cfg$set("selenium$use_selenium", FALSE)
 
 ### Fault Tolerance and Progress Protection
 
-One of the core strengths of `taRantula` is its resilience. Scraping thousands of URLs is prone to interruptions (network timeouts, hardware crashes, or OS updates).
+One of the core strengths of `taRantula` is its resilience. Scraping thousands of URLs is prone to interruptions, such as network timeouts, hardware crashes, or OS updates.
 
 #### Snapshotting Mechanism
 
 The configuration includes a `snapshot_every` parameter (default is 10).
 
-**How it works:** Every N URLs, each worker writes its current progress to a temporary "snapshot" file in the project directory.
+**How it works:** Every N URLs, each worker writes its current progress to a temporary "snapshot" file in the project directory. Simultaneously, all extracted data is persisted into highly compressed **Parquet files**, ensuring the actual scraped content is saved immediately.
 
-**Crash Recovery:** If the `R` session or the Selenium server crashes, simply re-initialize the `UrlScraper` with the same configuration. On startup, the class detects these snapshots and the existing DuckDB database.
+**Crash Recovery:** If the `R` session or the Selenium server crashes, simply re-initialize the `UrlScraper` with the same configuration. On startup, the class detects these snapshot files and reconciles them with the existing DuckDB database and Parquet archives.
 
-**Persistence:** Only the URLs processed since the *last* snapshot are lost, ensuring that 99% of your progress is usually preserved.
+**Persistence:** The snapshotting mechanism ensures that only the URLs currently in the buffer are at risk; since all successfully scraped data is written to Parquet files during the operation, a large percentage of the progress is permanently preserved.
 
 ### Data Extraction and Iteration
 
-Data is managed through a hybrid architecture: metadata is stored directly in **DuckDB**, while raw HTML content (`src`) is archived in highly compressed **Parquet** files.
+Data is managed through a hybrid architecture: relational metadata (status, timestamps, and hierarchy) is stored in **DuckDB**, while the raw extracted content (HTML source and discovered link lists) is archived in partitioned **Parquet files**.
 
-The `$results()` method abstracts this complexity by automatically joining metadata with the corresponding Parquet archives. For large datasets, you can toggle the `with_src` parameter to choose between high-performance metadata analysis and full-content extraction.
+The `$results()` method abstracts this complexity by automatically performing an on-the-fly join between the DuckDB metadata and the corresponding Parquet archives. For large datasets, you can toggle the `with_src` parameter to choose between high-performance metadata analysis and full-content extraction.
 
 ```{r extraction}
 # By default: Access results as a data.table, including the HTML source code.
@@ -205,7 +209,8 @@ results_dt <- s$results()
 # This is significantly faster for filtering or summary statistics.
 results_meta <- s$results(with_src = FALSE)
 
-# Access all discovered links from the link graph
+# Access all discovered links; This internally computes 
+# hierarchy levels
 links_dt <- s$links()
 
 # Inspect execution logs for progress tracking and redirects

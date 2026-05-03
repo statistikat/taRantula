@@ -1,42 +1,24 @@
-#' @title Import and Store Scraping Log Files
+#' Import and store scraping log files
 #'
-#' @description
-#' Reads individual progress log files generated during scraping, parses
-#' their contents, and inserts the collected entries into the `logs` table
-#' of the DuckDB results database.
-#' After successful insertion, processed log files are removed from the
-#' filesystem.
+#' Reads worker-generated progress log files, parses their content, and imports
+#' the entries into the logs table of the DuckDB database.
 #'
-#' @details
-#' The function performs the following actions:
+#' This function iterates through the progress directory to collect log files
+#' produced by parallel workers. It processes each file line-by-line to
+#' extract timestamps, chunk identifiers, and URLs. The parsed data is then
+#' imported into the database using a temporary staging table to ensure efficient
+#' deduplication. Processed log files are deleted from the filesystem upon
+#' successful database insertion.
 #'
-#' * Scans the `progress_dir` for log files created by parallel scraper workers
-#' * Parses each log file line‑by‑line, splitting entries into:
-#'   - timestamp
-#'   - chunk/work‑unit identifier
-#'   - URL currently being processed
-#' * Converts parsed entries into a data frame suitable for database storage
-#' * Inserts all log entries into the DuckDB `logs` table using
-#'   `"INSERT OR IGNORE"` to avoid duplicates
-#' * Removes successfully processed log files
+#' @param progress_dir Path to the directory containing worker log files.
+#' @param db_file Path to the DuckDB database file.
 #'
-#' Log files are expected to contain tab‑separated entries created by worker
-#' processes. Files that are empty or unreadable are automatically discarded.
-#'
-#' @param progress_dir Path to the directory containing log files produced
-#'   during scraping.
-#' @param db_file Path to the DuckDB database file where logs should be stored.
-#'
-#' @return
-#' Invisibly returns `TRUE` after logs have been imported and (if possible) the
-#' corresponding files removed.
+#' @return Invisibly returns TRUE after logs are imported and files are removed.
 #'
 #' @keywords internal
 #' @noRd
-#' @seealso
-#' * The `logs` table created in the scraper database structure
-#' * Worker‑level logging functions within the scraper implementation
 .handle_logs <- function(progress_dir, db_file) {
+  # Parse a single line from a log file into a data frame
   .parse_single_logfile <- function(p) {
     if (length(p) >= 3L) {
       data.frame(
@@ -55,20 +37,22 @@
     }
   }
 
+  # Identify available log files
   progress_files <- fs::dir_ls(progress_dir, type = "file", recurse = TRUE)
-
   if (length(progress_files) == 0) {
     return(invisible())
   }
 
+  # Parse log content from all files
   logs <- lapply(progress_files, function(x) {
-    # Read progress lines
     lines <- readLines(x, warn = FALSE)
     lines <- lines[!grepl("forcing new session", tolower(lines))]
+
     if (!length(lines)) {
       fs::file_delete(x)
       return(NULL)
     }
+
     parts <- strsplit(lines, "\t", fixed = TRUE)
     df <- do.call(rbind, lapply(parts, .parse_single_logfile))
 
@@ -81,23 +65,25 @@
 
   df <- do.call("rbind", logs)
 
+  # Connect to DB
   stopifnot(fs::file_exists(db_file))
   con <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = FALSE))
   on.exit(try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE), add = TRUE)
 
+  # Import log data via transaction using a temporary staging table
   res <- tryCatch(
-    # "Insert or ignore" does implicit deduplication
     expr = DBI::dbWithTransaction(conn = con, code = {
       DBI::dbWriteTable(con, "tmp_logs", df, overwrite = TRUE)
-      DBI::dbExecute(con, "INSERT OR IGNORE INTO logs SELECT * FROM tmp_logs")
-      DBI::dbExecute(con, "DROP TABLE tmp_logs")
+      DBI::dbExecute(con, sql_queries$import_logs_tmp)
+      DBI::dbExecute(con, sql_queries$drop_tmp_logs_table)
     }),
     error = function(e) e
   )
 
+  # Remove log files only if database operations succeeded
   if (!inherits(res, "error")) {
-    # they are now successfully inserted into the database
     try(fs::file_delete(progress_files), silent = TRUE)
   }
+
   invisible(TRUE)
 }

@@ -8,4 +8,5 @@
 #' @importFrom robotstxt robotstxt
 #' @importFrom stringr str_match_all
 #' @importFrom rlang !!!
+#' @importFrom progressr with_progress
 NULL

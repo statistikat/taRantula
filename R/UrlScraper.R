@@ -114,42 +114,36 @@ UrlScraper <- R6::R6Class(
     #' if present, and configures progress handlers.
     #'
     #' @param config A list (or configuration object) of settings, typically
-    #'   created by [paramsScraper()]. It should include:
-    #'   * `db_file` – path to the DuckDB database file.
-    #'   * `snapshot_dir` – directory for snapshot files.
-    #'   * `progress_dir` – directory for progress/log files.
-    #'   * `stop_file` – path to the stop signal file.
-    #'   * `urls_todo` – character vector of URLs still to be scraped.
-    #'   * `selenium` – list of Selenium settings (host, port, workers, etc.).
-    #'   * `robots` – list of `robots.txt` handling options.
-    #'   * any additional options required by helper functions.
+    #'    created by [paramsScraper()]. It should include:
+    #'    * `db_file` – path to the DuckDB database file.
+    #'    * `snapshot_dir` – directory for snapshot files.
+    #'    * `progress_dir` – directory for progress/log files.
+    #'    * `stop_file` – path to the stop signal file.
+    #'    * `urls` – character vector of URLs still to be scraped.
+    #'    * `selenium` – list of Selenium settings (host, port, workers, etc.).
+    #'    * `robots` – list of `robots.txt` handling options.
+    #'    * any additional options required by helper functions.
     #'
     #' @return An initialized `UrlScraper` object (invisibly).
     initialize = function(config) {
+      # Normalize and apply the configuration
       private$config <- .initialize(config = config)
 
+      # Enable and configure progress reporting handlers
       options(progressr.enable = TRUE)
       progressr::handlers(global = TRUE)
       progressr::handlers("cli") # or rstudio | progress | debug
 
-      # Initialize results/log databases in duckdb
-      # and create required dirs for snapshotting/logging purposes
+      # Initialize DB and required directories
       private$init_storage()
 
-      # Handling Snapshots (if any) before Scraping
+      # Restore pending snapshots / logs
       private$handle_snapshots()
-
-      # Handling Logs (if any) before Scraping
       private$handle_logs()
 
-      len_urls <- length(private$config$urls_todo)
-      urls_scraped <- private$get_scraped_urls()
-      len_urls_scraped <- nrow(private$get_scraped_urls())
-      cli::cli_alert_info(
-        text = glue::glue(
-          "Initialized. {len_urls} URLs provided - {len_urls_scraped} URLs already scraped"
-        )
-      )
+      # Register pending URLs in the database
+      self$update_urls(config$get("urls"), force = FALSE)
+
       return(invisible(self))
     },
 
@@ -158,53 +152,48 @@ UrlScraper <- R6::R6Class(
     #'
     #' @details
     #' This method orchestrates the parallel scraping process:
-    #' * Re‑initializes storage and processes any existing snapshots or logs.
+    #' * Re-initializes storage and processes any existing snapshots or logs.
     #' * Computes the set of URLs still to scrape.
     #' * Optionally performs `robots.txt` checks on new domains.
     #' * Sets up a parallel plan via the `future` framework.
-    #' * Starts multiple Selenium (or non‑Selenium) sessions.
+    #' * Starts multiple Selenium (or non-Selenium) sessions.
     #' * Distributes URLs across workers and tracks global progress.
     #' * Cleans up snapshots/logs and updates internal URL state after scraping.
     #'
-    #' If a stop‑file is detected (see [`stop()`]), scraping is aborted
-    #' before starting. Workers themselves will also honor the stop‑file to
+    #' If a stop-file is detected (see `stop()`), scraping is aborted
+    #' before starting. Workers themselves will also honor the stop-file to
     #' terminate gracefully after finishing the current URL.
     #'
     #' @param batch_size (integerish) Maximum number of URLs to process per
     #' iteration before merging results.
     #' @return The `UrlScraper` object (invisibly), with internal state
-    #'   updated to reflect newly scraped URLs.
+    #'    updated to reflect newly scraped URLs.
     scrape = function(batch_size = 2000) {
-      # check if dev-mode is required (envvar or package is not installed)
       is_dev <- private$is_dev()
       private$init_storage()
 
-      # Handling Snapshots (if any) before scraping
+      # Import existing snapshots and logs before initiating the crawl
       private$handle_snapshots()
-
-      # Handling Logs (if any) before scraping
       private$handle_logs()
 
-      urls_todo <- private$config$urls_todo
-      urls_scraped <- private$get_scraped_urls()
-      total_count <- length(urls_todo) + nrow(urls_scraped)
-      done_initial <- nrow(urls_scraped)
+      info <- self$url_info
+      total_count <- info$nr_todo + info$nr_scraped
+      done_count  <- info$nr_scraped
+      urls_todo <- self$urls_todo
 
       if (length(urls_todo) == 0) {
-        cli::cli_alert_info("All URLs already scraped. Nothing to do.")
+        cli::cli_alert_info("All URLs already processed. Nothing to do.")
         return(invisible(self))
       }
 
-      # Handling robots.txt on potentially new domains
-      private$handle_robots(urls = urls_todo)
-
       cli::cli_alert_info(
-        text = glue::glue(paste(
-          "Resuming with {done_initial}/{total_count} already scraped ({.fmt(100 * done_initial / total_count)}%).",
-          "{length(urls_todo)} remaining. Batch size: {batch_size}"
-        ))
+        text = glue::glue(
+          "Resuming: {done_count}/{total_count} URLs processed ({.fmt(100 * done_count / total_count, digits = 1)}%). ",
+          "{info$nr_todo} remaining. Batch size: {batch_size}"
+        )
       )
 
+      # Abort if a termination signal file exists
       if (fs::file_exists(private$config$stop_file)) {
         cli::cli_alert_danger(
           text = glue::glue(
@@ -214,12 +203,12 @@ UrlScraper <- R6::R6Class(
         return(invisible(self))
       }
 
-      # Cleanup
+      # Clear progress directory before starting
       if (fs::dir_exists(private$config$progress_dir)) {
         fs::file_delete(fs::dir_ls(private$config$progress_dir))
       }
 
-      # Parallelization Setup
+      # Configure parallel execution
       nr_workers <- private$config$selenium$workers
       oplan <- future::plan()
       on.exit(future::plan(oplan), add = TRUE)
@@ -230,10 +219,11 @@ UrlScraper <- R6::R6Class(
 
       start_time <- Sys.time()
 
-      # Wrap global progressbar
+      # Execute scraping within a progress tracking wrapper
       progressr::with_progress({
         p <- progressr::progressor(steps = length(urls_todo))
         while (length(urls_todo) > 0) {
+          # Termination check
           if (fs::file_exists(private$config$stop_file)) {
             cli::cli_alert_warning(
               "Stop-file detected. Finishing current batch and exiting..."
@@ -241,39 +231,29 @@ UrlScraper <- R6::R6Class(
             break
           }
 
-          # retrieve current batch of urls and split into chunks
+          # Batch and chunk URL distribution for parallel workers
           current_batch <- head(urls_todo, batch_size)
-          current_nr_workers <- min(length(current_batch), nr_workers)
+          current_nr_workers <- min(nrow(current_batch), nr_workers)
           chunks <- private$split_into_chunks(current_batch, current_nr_workers)
           conf_list <- as.list(private$config)
 
+          # Prepare environment for development mode or package deployment
           if (is_dev) {
-            # capture the required functions and packages
             f_pkgs <- c(
-              "progressr",
-              "data.table",
-              "selenium",
-              "fs",
-              "jsonlite",
-              "xml2",
-              "rvest",
-              "httr2",
-              "robotstxt",
-              "stats"
+              "progressr", "data.table", "selenium", "fs", "jsonlite",
+              "xml2", "rvest", "httr2", "stats"
             )
             f_list <- list(
               ".worker_scrape" = .worker_scrape,
               ".scrape_single_url" = .scrape_single_url,
               ".write_snapshot" = .write_snapshot,
-              "check_robotsdata" = check_robotsdata,
               "extractLinks" = extractLinks,
-              "query_robotsdata" = query_robotsdata,
               "get_domain" = get_domain,
+              "clean_url" = clean_url,
               "check_links" = check_links
             )
 
-            # strip the 'taRantula' environment pointer
-            # which should prevent the worker from trying to load a non-existent package
+            # Re-map function environments for isolated worker processes
             f_globals <- lapply(f_list, function(fn) {
               environment(fn) <- .GlobalEnv
               return(fn)
@@ -285,7 +265,7 @@ UrlScraper <- R6::R6Class(
             f_pkgs <- "taRantula"
           }
 
-          # Scrape batch of urls
+          # Parallel batch processing
           future.apply::future_lapply(
             seq_along(chunks),
             function(x) {
@@ -309,36 +289,27 @@ UrlScraper <- R6::R6Class(
             future.packages = f_pkgs
           )
 
-          # Handle Snaphots/Logs while workers pause
+          # Post-batch maintenance / cleanup
           private$handle_snapshots()
           private$handle_logs()
-
-          # Check current scraping state
-          scraped_now <- private$get_scraped_urls()
-          urls_todo <- setdiff(private$config$urls_todo, scraped_now$url)
-
-          gc() # Force Mem-Cleanup
+          urls_todo <- self$urls_todo
+          gc()
         }
       })
 
-      # Finalize
-      scraped_final <- private$get_scraped_urls()
-      private$config$urls <- scraped_final[["url"]]
-      private$config$urls_todo <- setdiff(
-        private$config$urls_todo,
-        scraped_final$url
-      )
-
-      now_scraped_count <- nrow(scraped_final)
+      # Summarize performance metrics
+      ii <- self$url_info
       elapsed <- difftime(Sys.time(), start_time, units = "secs")
+      total_count <- ii$nr_urls - ii$nr_failed_domaincheck - ii$nr_blocked
 
       cli::cli_alert_info(
         text = glue::glue(paste(
-          "Done. Scraped {now_scraped_count}/{total_count} URLs ({.fmt(100 * (now_scraped_count / total_count), digits = 1)}%).",
+          "Done. Scraped {ii$nr_scraped}/{total_count} URLs ({.fmt(100 * (ii$nr_scraped / total_count), digits = 1)}%).",
           "Elapsed: {.fmt(elapsed)}s"
         ))
       )
-      invisible(self)
+
+      return(invisible(self))
     },
 
     #' @description
@@ -365,48 +336,55 @@ UrlScraper <- R6::R6Class(
     #'
     #' @return The `UrlScraper` object (invisibly).
     update_urls = function(urls, force = FALSE) {
-      stopifnot(rlang::is_character(urls))
+      # Normalize URLs
+      urls_clean <- unique(vapply(urls, clean_url, FUN.VALUE = character(1)))
+      dup_idx <- duplicated(urls_clean)
+      urls_clean <- urls_clean[!dup_idx]
 
-      if (force == TRUE) {
-        # only discard duplicted URLs in urls
-        urls_scraped <- NULL
-      } else {
-        # discard duplicated URLs in urls
-        # and already scraped URLs
-        urls_scraped <- private$get_scraped_urls()
-      }
+      conn <- DBI::dbConnect(duckdb::duckdb(private$config$db_file, read_only = FALSE))
+      on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
 
-      index_filter <- private$filter_new_urls(
-        urls_scraped = urls_scraped,
-        urls_new = urls,
-        return_index = TRUE
-      )
-      index_drop <- unique(unlist(index_filter))
-      index_keep <- setdiff(seq_along(urls), index_drop)
-      remaining <- urls[index_keep]
-      private$config$urls <- urls_scraped[["url"]]
-      private$config$urls_todo <- remaining
+      # Capture state for summary reporting
+      stats_before <- self$url_info
 
-      nr_new <- length(remaining)
-      nr_removed <- length(urls) - nr_new
-      cli::cli_alert_info(glue::glue("{nr_new} URLs were added"))
-      if (nr_removed > 0) {
-        nr_old <- length(index_filter$index_old)
-        nr_dup <- length(index_filter$index_duplicate)
-        if (nr_old > 0) {
-          text_info <- paste0(
-            "Number of URLs already in the database: {nr_old}"
-          )
-          cli::cli_alert_info(glue::glue(text_info))
+      # Synchronize new URLs with the database storage
+      DBI::dbWithTransaction(conn, {
+        DBI::dbExecute(conn, sql_queries$tmp_urls_create)
+        DBI::dbAppendTable(conn, "tmp_urls", data.frame(url = urls_clean))
+        DBI::dbExecute(conn, sql_queries$import_urls_tmp)
+
+        # Apply conditional synchronization logic
+        if (isTRUE(force)) {
+          DBI::dbExecute(conn, sql_queries$results_force_up)
+        } else {
+          DBI::dbExecute(conn, sql_queries$results_sync_new_todo_insert)
         }
-        if (nr_dup > 0) {
-          text_info <- paste0(
-            "Number of duplicated URLs in the input: {nr_dup}"
-          )
-          cli::cli_alert_info(glue::glue(text_info))
-        }
-      }
-      invisible(self)
+        DBI::dbExecute(conn, sql_queries$drop_tmp_urls)
+      })
+
+      # Perform domain availability and robots.txt validation
+      private$handle_domaincheck()
+      private$handle_robots()
+
+      # Summarize changes
+      stats_after <- self$url_info
+      added_queue <- stats_after$nr_todo - stats_before$nr_todo
+      blocked_domain <- stats_after$nr_failed_domaincheck - stats_before$nr_failed_domaincheck
+      blocked_robots <- stats_after$nr_blocked - stats_before$nr_blocked
+      scraped_new <- stats_after$nr_scraped - stats_before$nr_scraped
+
+      cli::cli_h3("taRantula URL Summary")
+      cli::cli_dl(c(
+        "Provided" = glue::glue("{length(urls_clean)} URLs"),
+        "Added to scrape" = glue::glue("{added_queue} new URLs"),
+        "Already done" = glue::glue("{scraped_new} URLs already scraped"),
+        "Issues found" = glue::glue("{blocked_domain} domain failures, {blocked_robots} robots-blocked")
+      ))
+      cli::cli_alert_info(glue::glue(
+        "Status: {stats_after$nr_todo} URLs pending | Total: {stats_after$nr_urls} entries in DB"
+      ))
+
+      return(invisible(self))
     },
 
     #' @description
@@ -440,13 +418,55 @@ UrlScraper <- R6::R6Class(
     #' @description
     #' Extract scraped links from the internal database.
     #'
+    #' @details
+    #' This method retrieves links from the database view, which is populated
+    #' based on the underlying parquet data. Once the raw link data is
+    #' retrieved, the function iteratively computes and appends the hierarchical
+    #' depth (level) for each URL relative to the root pages.
+    #'
     #' @param filter Optional character string with a SQL‑like `WHERE`
     #'   condition (without the `WHERE` keyword). If `NULL` (default), all
     #'   rows from the `links` table are returned.
     #'
-    #' @return A `data.table` containing the extracted links.
+    #' @return A `data.table` containing the extracted links with associated
+    #' depth levels.
     links = function(filter = NULL) {
-      private$extract_results(tab = "links", filter = filter)
+      # Fetch link data from the database view
+      res <- private$extract_results(tab = "links", filter = filter)
+      if (nrow(res) == 0) {
+        return(NULL)
+      }
+
+      # Identify child pages and determine root URLs
+      children <- unique(res$target_url)
+      all_urls <- private$extract_results(tab = "urls", filter = NULL)$url
+      roots <- setdiff(all_urls, children)
+
+      # Initialize root URLs as level 1
+      dt_levels <- data.table(target_url = roots, level = 1)
+
+      # Iteratively compute levels based on link hierarchy
+      current_level <- 1
+      while (TRUE) {
+        new_links <- res[source_url %in% dt_levels[level == current_level, target_url]]
+        new_links <- new_links[!target_url %in% dt_levels$target_url]
+
+        if (nrow(new_links) == 0) {
+          break
+        }
+
+        new_rows <- data.table(
+          target_url = unique(new_links$target_url),
+          level = current_level + 1
+        )
+        dt_levels <- rbind(dt_levels, new_rows)
+        current_level <- current_level + 1
+      }
+
+      # Merge computed levels back into the results table
+      res <- merge(res, dt_levels, by = "target_url", all.x = TRUE)
+
+      return(res[])
     },
 
     #' @description
@@ -534,28 +554,36 @@ UrlScraper <- R6::R6Class(
     #' @details
     #' This method performs the following clean‑up steps:
     #' * Processes any remaining snapshots and logs.
-    #' * Deletes the snapshot directory (if it exists).
+    #' * Deletes the snapshot directory if it exists.
     #' * Opens a DuckDB connection to the configured `db_file` and
     #'   disconnects it with `shutdown = TRUE`.
     #'
     #' It is good practice to call `close()` once you are done with a
-    #' `UrlScraper` instance.
+    #' `UrlScraper` instance, or rely on the automatic `finalize()` method.
     #'
     #' @return Invisible `NULL`.
     close = function() {
-      # Cleanup
-      try(private$handle_snapshots(), silent = TRUE)
-      try(private$handle_logs(), silent = TRUE)
-      if (fs::dir_exists(private$config$snapshot_dir)) {
-        fs::dir_delete(private$config$snapshot_dir)
-      }
-
-      if (fs::file_exists(private$config$db_file)) {
-        con <- DBI::dbConnect(
-          drv = duckdb::duckdb(private$config$db_file, read_only = FALSE)
-        )
-        on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-      }
+      private$cleanup()
+    }
+  ),
+  #' @field url_info A list containing aggregated statistics of the crawl process.
+  #'   Provides the total count of URLs, as well as counts for successful scrapes,
+  #'   failed domain checks, failed scraping attempts, and pending URLs.
+  #'
+  #' @field urls_todo A character vector of unique URLs currently marked with
+  #'   the 'todo' status in the database. These are URLs that need to be scraped.
+  active = list(
+    url_info = function() {
+      conn <- DBI::dbConnect(duckdb::duckdb(private$config$db_file, read_only = TRUE))
+      on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
+      res <- DBI::dbGetQuery(conn, sql_queries$get_url_statistics)
+      as.list(res)
+    },
+    urls_todo = function() {
+      conn <- DBI::dbConnect(duckdb::duckdb(private$config$db_file, read_only = TRUE))
+      on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
+      res <- DBI::dbGetQuery(conn, sql_queries$get_todo_urls)
+      return(res$url)
     }
   ),
   private = list(
@@ -565,12 +593,14 @@ UrlScraper <- R6::R6Class(
       is_installed <- system.file(package = "taRantula") != ""
       return(env_dev || !is_installed)
     },
-    finalize = function() {
-      # Try to cleanup before GC cleanup
+    cleanup = function() {
+      # Handy Snapshots and Logs
       try(private$handle_snapshots(), silent = TRUE)
       try(private$handle_logs(), silent = TRUE)
+
+      # Remove Snapshot/Folder Directories
       try(
-        expr = {
+        {
           if (fs::dir_exists(private$config$snapshot_dir)) {
             fs::dir_delete(private$config$snapshot_dir)
           }
@@ -578,23 +608,27 @@ UrlScraper <- R6::R6Class(
             fs::dir_delete(private$config$progress_dir)
           }
         },
-        silent = TRUE
-      )
+        silent = TRUE)
 
-      con <- self$.__enclos_env__$private$config$conn
+      # Close DB Conection
+      con <- private$config$conn
       if (!is.null(con)) {
         try(DBI::dbDisconnect(con, shutdown = TRUE), silent = TRUE)
-        self$.__enclos_env__$private$config$conn <- NULL
+        private$config$conn <- NULL
       }
 
-      # reset options
+      # Optionen zurücksetzen
       try(options(private$config$saved_options), silent = TRUE)
+    },
+    finalize = function() {
+      private$cleanup()
     },
     init_storage = function() {
       .init_storage(
         db_file = private$config$db_file,
         snapshot_dir = private$config$snapshot_dir,
-        progress_dir = private$config$progress_dir
+        progress_dir = private$config$progress_dir,
+        data_dir = private$config$data_dir
       )
     },
     get_scraped_urls = function() {
@@ -602,28 +636,31 @@ UrlScraper <- R6::R6Class(
         db_file = private$config$db_file
       )
     },
-    filter_new_urls = function(urls_scraped, urls_new, return_index = FALSE) {
-      .filter_new_urls(
-        urls_scraped = urls_scraped,
-        urls_new = urls_new,
-        return_index = return_index
-      )
-    },
     split_into_chunks = function(x, k) {
-      k <- max(1L, min(k, length(x)))
-      idx <- ((seq_along(x) - 1L) %% k) + 1L
-      split(x, idx)
-    },
-    write_snapshot = function(dt, chunk_id) {
-      .write_snapshot(
-        dt = dt,
-        chunk_id = chunk_id,
-        snapshot_dir = private$config$snapshot_dir
-      )
+      if (inherits(x, "data.frame")) {
+        n <- nrow(x)
+      } else {
+        n <- length(x)
+      }
+
+      # Ensure k is within a valid range
+      k <- max(1L, min(k, n))
+
+      # Create a vector of chunk IDs
+      idx <- ((seq_len(n) - 1L) %% k) + 1L
+
+      # Split based on the detected structure
+      return(split(x, idx))
     },
     handle_snapshots = function() {
       .handle_snapshots(
         snapshot_dir = private$config$snapshot_dir,
+        data_dir = private$config$data_dir,
+        db_file = private$config$db_file
+      )
+    },
+    handle_domaincheck = function() {
+      .handle_domaincheck(
         db_file = private$config$db_file
       )
     },
@@ -633,13 +670,10 @@ UrlScraper <- R6::R6Class(
         db_file = private$config$db_file
       )
     },
-    handle_robots = function(urls) {
+    handle_robots = function() {
       .handle_robots(
         db_file = private$config$db_file,
-        snapshot_every = private$config$robots$snapshot_every,
-        workers = private$config$robots$workers,
-        urls = private$config$urls_todo,
-        user_agent = private$config$robots_user_agent
+        robots_config = private$config$robots
       )
     },
     extract_results = function(tab, filter = NULL) {
@@ -653,11 +687,13 @@ UrlScraper <- R6::R6Class(
                              group = NULL,
                              filter_links = NULL,
                              ignore_cases = TRUE) {
+      # Retrieve and filter links based on provided patterns
       results_links <- .extract_results(
         db_file = private$config$db_file,
         tab = "links",
         filter = NULL
       )
+
       filter_links <- paste(filter_links, collapse = "|")
       # query_filter_links <- glue::glue("regexp_matches(LOWER(COALESCE(HREF, '')), '({filter_links})') OR
       #                                   regexp_matches(LOWER(COALESCE(LABEL, '')), '({filter_links})')")
@@ -666,14 +702,17 @@ UrlScraper <- R6::R6Class(
         href %ilike% filter_links | label %ilike% filter_links
       ]
 
+      # Extract relevant document content
       results_docs <- .extract_results(
         db_file = private$config$db_file,
         tab = "full_results",
         filter = NULL
       )
 
+      # Filter documents to match processed links with successful scrape status
       results_docs <- results_docs[url %in% results_links$href & status == TRUE]
 
+      # Apply regex extraction to the filtered document set
       .extract_regex(
         docs = results_docs$src,
         urls = results_docs$url,

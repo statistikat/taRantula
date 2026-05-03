@@ -1,110 +1,77 @@
 #' Scrape a Single URL
 #'
-#' This function retrieves and processes the content of a single URL using either
-#' a Selenium session or an HTTP request. It extracts the HTML source, identifies
-#' potential redirects, parses links on the page, and returns a structured
-#' `data.table` containing the scraping results.
+#' Retrieves and processes content from a single URL using either a Selenium
+#' session or an HTTP request.
 #'
-#' @param db_file Character string specifying the path to the DuckDB database file
-#'    used for robots.txt rule evaluation.
-#' @param sid Either a Selenium session object (`SeleniumSession`) or a named list of
-#'    HTTP headers to be used with `httr2::request()`.
-#' @param url Character string containing the URL to be scraped.
-#' @param robots_check Logical indicating whether robots.txt rules should be validated
-#'    before scraping.
+#' This function performs navigation, captures the final URL to account for
+#' potential redirects, and executes the link extraction process. It uses the
+#' `sid` parameter to determine the scraping method: if `sid` is an instance
+#' of a SeleniumSession object, Selenium is used; otherwise, the function
+#' defaults to an `httr2` request.
+#'
+#' @param sid A SeleniumSession object for browser-based scraping or a request
+#' configuration list for HTTP-based scraping.
+#' @param url Character string specifying the URL to be scraped.
 #'
 #' @return A `data.table` with the following columns:
-#'     - **url**: Final URL after potential redirection.
-#'     - **url_redirect**: Original URL, if a redirect occurred; otherwise `NA`.
-#'     - **status**: Logical indicating whether scraping succeeded.
-#'     - **src**: HTML source (or `NA` if scraping failed or disallowed).
-#'     - **links**: A list-column containing extracted link information as a `data.table`.
-#'     - **scraped_at**: POSIXct timestamp indicating when the scrape occurred.
-#'
-#' @details
-#' The function first checks robots.txt rules using `check_robotsdata()`.
-#' If scraping is disallowed, a standardized record is returned.
-#' When using Selenium, the browser is navigated to the URL and the potentially
-#' redirected final URL is captured. For non-Selenium inputs, an HTTP GET request
-#' is performed.
-#' Errors during scraping are caught and converted into structured output.
+#'    - **url**: The URL that was requested.
+#'    - **url_actual**: Final URL after potential redirection.
+#'    - **url_redirect**: The original URL if a redirect occurred, otherwise `NA`.
+#'    - **status**: Logical indicating whether scraping succeeded.
+#'    - **src**: HTML source (or `NA` if scraping failed).
+#'    - **links**: A list-column containing extracted link information as a `data.table`.
+#'    - **scraped_at**: POSIXct timestamp indicating when the scrape occurred.
 #'
 #' @keywords internal
-.scrape_single_url <- function(db_file, sid, url, robots_check) {
-  identical_urls <- function(url1, url2) {
-    url_parsed <- urltools::url_parse(c(url1, url2))
-    setDT(url_parsed)
-    url_parsed <- unique(url_parsed)
-    return(nrow(url_parsed) == 1)
-  }
+#' @noRd
+.scrape_single_url <- function(sid, url) {
+  ts <- as.POSIXct(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), tz = "UTC")
 
-  ts <- as.POSIXct(format(Sys.time()), tz = "UTC")
-
+  # Default structure for failed attempts
   dt_links_default <- data.table::data.table(
     href = character(),
     label = character(),
     source_url = character(),
-    level = integer(),
     scraped_at = as.POSIXct(character(0))
   )
 
-  if (robots_check == TRUE & isFALSE(check_robotsdata(db_file = db_file, url = url))) {
-    # scraping is not allowed
-    return(
-      data.table::data.table(
-        url = url,
-        url_redirect = NA,
-        status = FALSE,
-        src = "disallowed due to robots.txt",
-        links = list(dt_links_default),
-        scraped_at = ts
-      )
-    )
-  }
-
+  # Execute scraping operation with error handling
   r <- tryCatch(
     expr = {
       if ("SeleniumSession" %in% class(sid)) {
         sid$navigate(url = url)
-        current_url <- sid$current_url()
-        redirect <- !identical_urls(url, current_url)
-
-        url_redirect <- NA_character_
-        if (redirect) {
-          url_redirect <- url
-        }
-        url <- current_url
+        final_url <- sid$current_url()
         html_source <- sid$get_page_source()
       } else {
-        req <- httr2::request(url)
-        req <- httr2::req_method(req, "GET")
-        req <- httr2::req_headers(req, !!!sid)
+        req <- httr2::request(url) |> httr2::req_method("GET")
         resp <- httr2::req_perform(req)
+        final_url <- resp$url
         html_source <- httr2::resp_body_string(resp)
-        url_redirect <- NA_character_
       }
 
-      dt_links <- extractLinks(
-        doc = html_source,
-        baseurl = url
-      )
-
+      # Determine if a redirection occurred (including url-cleanup)
+      is_redirect <- clean_url(url) != clean_url(final_url)
       data.table::data.table(
         url = url,
-        url_redirect = url_redirect,
+        url_actual = final_url,
+        url_redirect = if (is_redirect) final_url else NA_character_,
         status = TRUE,
         src = html_source,
-        links = list(dt_links),
+        links = list(extractLinks(doc = html_source, baseurl = url)),
         scraped_at = ts
       )
     },
     error = function(e) {
-      message("Scrape failed for: ", url)
+      cli::cli_alert_danger(
+        glue::glue("Error when scraping URL {url}: {e$message}")
+      )
+      # Return failure metadata structure
       data.table::data.table(
         url = url,
-        url_redirect = NA,
+        url_actual = NA_character_,
+        url_redirect = NA_character_,
         status = FALSE,
-        src = NA,
+        src = NA_character_,
         links = list(dt_links_default),
         scraped_at = ts
       )
@@ -113,48 +80,39 @@
   return(r)
 }
 
-
 #' Worker Function for Batched URL Scraping
 #'
-#' This internal function orchestrates the scraping of multiple URLs in parallel
-#' processing contexts. It manages progress logging, intermediate snapshot
-#' creation, and multi-stage retry logic ("double-dipping") for failed URLs.
+#' Orchestrates the scraping of multiple URLs in parallel contexts, managing
+#' progress tracking, intermediate snapshots, and failure recovery logic.
 #'
-#' @param urls A character vector of the URLs assigned to this specific worker chunk.
-#' @param chunk_id A numeric or character identifier for the current worker, used
-#'   to organize log files and name snapshots.
-#' @param p A progressor function (from the `progressr` package) used to update
-#'   the global progress bar.
-#' @param config A named list containing the scraping configuration, including:
-#'   - **db_file**: Path to the DuckDB file for robots.txt caching.
-#'   - **robots$check**: Logical; whether to respect robots.txt rules.
-#'   - **selenium**: A list containing Selenium settings (port, host,
-#'     browser, and `snapshot_every`).
-#'   - **snapshot_dir**: Directory where `.rds` snapshots are saved.
-#'   - **stop_file**: Path to a file that, if created, signals the
-#'     worker to terminate early.
-#'   - **progress_dir**: Directory where worker-specific progress
-#'     logs are stored.
+#' The function follows a two-pass execution strategy. In the primary loop,
+#' each URL from the provided list is attempted once. If Selenium is enabled
+#' and a page fails to load, the URL is added to a retry queue. In the second
+#' pass, the function refreshes the session and attempts to recover the failed
+#' URLs up to two additional times. Progress is periodically flushed to disk
+#' based on the configured snapshot frequency.
 #'
-#' @return Invisibly returns `TRUE` if the worker finishes successfully,
-#'   or `FALSE` if a Selenium session could not be initialized.
+#' @param urls Character vector of URLs to be scraped.
+#' @param chunk_id Identifier for the worker used for file naming and logging.
+#' @param p Progressor function from the progressr package.
+#' @param config Named list containing the scraping configuration:
+#'    - **db_file**: Path to the DuckDB file for robots.txt caching.
+#'    - **robots$check**: Logical; whether to respect robots.txt rules.
+#'    - **selenium**: A list containing Selenium settings (port, host,
+#'      browser, and snapshot_every).
+#'    - **snapshot_dir**: Directory where .rds snapshots are saved.
+#'    - **stop_file**: Path to a file that, if created, signals the
+#'      worker to terminate early.
+#'    - **progress_dir**: Directory where worker-specific progress
+#'      logs are stored.
 #'
-#' @details
-#' The function follows a two-pass execution strategy:
-#'
-#' 1. **Main Loop**: Each URL is attempted once. If Selenium is enabled
-#'    and a page fails to load (returning `NA`), the URL is added to a
-#'    retry queue.
-#' 2. **Retry Loop**: After the primary loop, the Selenium session is
-#'    refreshed, and failed URLs are attempted up to two more times.
-#'
-#' Throughout both loops, the function periodically flushes data to disk via
-#' `.write_snapshot()` based on the `snapshot_every` frequency defined
-#' in the config.
+#' @return Invisibly returns TRUE if the worker finishes successfully, or
+#' FALSE if a scraping session could not be initialized.
 #'
 #' @keywords internal
+#' @noRd
 .worker_scrape <- function(urls, chunk_id, p, config) {
-  # check, if session still alive/valid
+  # Verify if the current scraping session is responsive
   .check_session_active <- function(sid) {
     active <- tryCatch(
       expr = {
@@ -168,7 +126,7 @@
     return(active)
   }
 
-  # Safely create a Selenium Session
+  # Initialize a Selenium session or prepare request headers
   .create_sid <- function(cfg, timeout = 300) {
     if (!isTRUE(cfg$selenium$use_selenium)) {
       return(c(user_agent = cfg$httr2$user_agent))
@@ -176,15 +134,13 @@
     tryCatch(
       expr = {
         sel_cfg <- cfg$selenium
-
-        # w3c-compatible
         caps <- list(
           browserName = sel_cfg$browser,
           pageLoadStrategy = sel_cfg$pageLoadStrategy,
           timeouts = list(
-            implicit = 5000, # 5 Sekunden Puffer für Elemente
-            pageLoad = 60000, # 60 Sekunden Max für Seitenaufbau
-            script = 30000 # 30 Sekunden für Scripte
+            implicit = 5000,
+            pageLoad = 60000,
+            script = 30000
           )
         )
 
@@ -207,7 +163,7 @@
     )
   }
 
-  # a random short sleep
+  # Introduce random delays
   .random_sleep <- function(long = FALSE) {
     if (isTRUE(long)) {
       Sys.sleep(stats::runif(1, 3, 7))
@@ -216,7 +172,7 @@
     }
   }
 
-  # consistent logging and progress-updating
+  # Log operation status and update the global progress bar
   .log_and_progress <- function(p, u_str, is_retry = FALSE, status = NULL, amount = 1) {
     if (!missing(p)) {
       prefix <- if (is_retry) "Retry " else ""
@@ -228,7 +184,7 @@
       }
     }
 
-    # write to log
+    # Write Logfile
     status_suffix <- if (!is.null(status)) glue::glue("\tRETRY_{status}") else ""
     cat(
       glue::glue("{format(Sys.time())}\t{chunk_id}\t{u_str}{status_suffix}"),
@@ -238,9 +194,8 @@
     )
   }
 
-  # setup vars
+  # Define file paths and configuration variables
   db_file <- config$db_file
-  robots_check <- config$robots$check
   snapshot_every <- config$selenium$snapshot_every
   snapshot_dir <- config$snapshot_dir
   stop_file <- config$stop_file
@@ -248,11 +203,13 @@
   fs::dir_create(fs::path_dir(progress_file), recurse = TRUE)
   fs::dir_create(snapshot_dir, recurse = TRUE)
 
+  # Initialize the Selenium session
   sid <- .create_sid(cfg = config)
   if (is.null(sid) && isTRUE(config$selenium$use_selenium)) {
     return(FALSE)
   }
 
+  # Ensure the session closes automatically upon completion or error
   on.exit(
     expr = {
       if ("SeleniumSession" %in% class(sid)) {
@@ -266,45 +223,34 @@
   retry_queue <- character()
   consecutive_failures <- 0
 
-  # main scraping loop; try every url once and move
-  # failed urls to retry_queue
-  for (i in seq_along(urls)) {
+  # Execute primary scraping loop
+  # Strategy: Try every URL once and if failed, move to retry queue
+  for (i in seq_len(length(urls))) {
+    u <- as.character(urls[i])
+
     if (fs::file_exists(stop_file)) {
       break
     }
 
-    # pro-active check
+    # Periodically verify session health
     if (i %% 50 == 0) {
       if (!.check_session_active(sid)) {
-        message(glue::glue(
-          "W{chunk_id}: Session not found. Creating new session"
-        ))
+        message(glue::glue("W{chunk_id}: Session unresponsive. Creating new session."))
         sid <- .create_sid(cfg = config)
       }
     }
 
-    u <- as.character(urls[[i]])
-
-    # scrape (intern tryCatch!)
-    rec <- .scrape_single_url(
-      db_file = db_file,
-      sid = sid,
-      url = u,
-      robots_check = robots_check
-    )
-
+    # Attempt to scrape the current URL
+    rec <- .scrape_single_url(sid = sid, url = u)
     is_error <- is.na(rec$src) && isTRUE(config$selenium$use_selenium)
 
-    # error-handling
+    # Manage failure state and retry queue
     if (is_error) {
       retry_queue <- c(retry_queue, u)
       consecutive_failures <- consecutive_failures + 1
 
-      # Check: session after error still alive?
       if (!.check_session_active(sid)) {
-        message(glue::glue(
-          "W{chunk_id}: Session no longer available: Url: {u}."
-        ))
+        message(glue::glue("W{chunk_id}: Session lost at URL: {u}."))
         try(sid$close(), silent = TRUE)
         sid <- .create_sid(cfg = config)
         consecutive_failures <- 0
@@ -314,10 +260,10 @@
       .random_sleep()
     }
 
-    # fully reset after 5 subsequent errors
+    # Force session reset after multiple consecutive failures
     if (consecutive_failures >= 5) {
       cat(
-        glue::glue("W{chunk_id}: 5 subsequent errors; Forcing new session."),
+        glue::glue("W{chunk_id}: Forced session reset after 5 failures."),
         file = progress_file,
         append = TRUE,
         sep = "\n"
@@ -334,6 +280,7 @@
     )
     out <- data.table::rbindlist(list(out, rec), use.names = TRUE, fill = TRUE)
 
+    # Write snapshotdata (rds) to disk
     if ((i %% snapshot_every) == 0L && !is.null(out)) {
       out <- .write_snapshot(
         dt = out,
@@ -343,9 +290,8 @@
     }
   }
 
-  # retry logic for initially failed urls (if any)
+  # Handle the retry queue for failed URLs
   if (length(retry_queue) > 0 && !fs::file_exists(stop_file)) {
-    # start with new session for retry queue
     try(sid$close(), silent = TRUE)
     sid <- .create_sid(cfg = config)
 
@@ -356,18 +302,11 @@
         }
         u <- retry_queue[[idx]]
 
-        # sleep a bit longer when dealing with problematic urls
         .random_sleep(long = TRUE)
 
         success <- FALSE
-        # max 2 additional retries
         for (attempt in 1:2) {
-          rec <- .scrape_single_url(
-            db_file = db_file,
-            sid = sid,
-            url = u,
-            robots_check = robots_check
-          )
+          rec <- .scrape_single_url(sid = sid, url = u)
           if (!is.na(rec$src)) {
             success <- TRUE
             break
@@ -392,7 +331,7 @@
           fill = TRUE
         )
 
-        # Snapshot check for long retry queues
+        # Snapshot check for retry queue progress
         if ((idx %% snapshot_every) == 0L && !is.null(out)) {
           out <- .write_snapshot(
             dt = out,
@@ -404,7 +343,7 @@
     }
   }
 
-  # finalize
+  # Save remaining data to disk
   if (!is.null(out) && nrow(out) > 0) {
     .write_snapshot(dt = out, chunk_id = chunk_id, snapshot_dir = snapshot_dir)
   }

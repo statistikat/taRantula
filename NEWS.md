@@ -1,3 +1,38 @@
+# taRantula next
+
+* **Storage Refactoring:** Migrated raw scraping data (source code and link metadata) from the database to highly efficient `parquet` files located in `{project_dir}/data`.
+
+* **Database Schema Evolution:**
+    * **New `urls` Table:** Dedicated storage for all URLs provided to the project.
+    * **Revised `results` Table:** Streamlined for performance; removed raw source code storage in favor of a `file_path` reference (pointing to the corresponding `parquet` file).
+        * **New `status` column:** Tracks URL state:
+            * `"todo"`: URL is awaiting scraping.
+            * `"success"`: Scraping completed; source code is available.
+            * `"failed_domain"`: Domain is unreachable; scraping not possible.
+            * `"failed_scraping"`: Scraping attempt failed.
+            * `"blocked"`: Access denied by `robots.txt`.
+    * **Dynamic Views:**
+        * Replaced the static `links` table with a dynamic view that aggregates link data directly from `parquet` files.
+        * Added a `full_results` view that mimics the previous `results` table structure while including sources and link data.
+
+* **Optimized Scraping Workflow:** 
+  * Moved domain reachability and `robots.txt` validation to a pre-scraping phase. 
+  * Workers now process only pre-validated `status = "todo"` URLs which allows for the removal of redundant availability checks within parallel worker processes.
+
+* **R6-Methods Improvements:**
+    * Updated the `$results()` method with a `with_src` parameter (default = `TRUE`) to switch between retrieving simple `results` table or the comprehensive `full_results` view.
+    * Updated the `$results()` method by querying the new view and internally computing the hierarchy levels.
+    * Added new active bindings:
+        * `$url_info`: Real-time counts of total, successfully scraped, pending, and failed URLs.
+        * `$urls_todo`: Returns all pending URLs currently set to `"todo"`.
+
+* **Maintainability & Code Quality:**
+    * Centralized all SQL queries into a structured `sql_queries` list for improved maintainability.
+    * Unified the cleanup process: `close()` and `finalize()` methods now share a single underlying private `cleanup()` method.
+    * Refinement and simplification of Roxygen documentation and various utility/helper functions.
+
+- [todo] Implement `$vacuum()` method to remove old/expired results from `parquet` Files; 
+
 # taRantula 0.1.0
 
 ### Main Features

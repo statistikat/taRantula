@@ -1,65 +1,32 @@
 #' Handle and Import Snapshot Files into the DuckDB Database
 #'
-#' Processes all snapshot `.rds` files found in a given directory, extracts both
-#' scraped content and discovered hyperlinks, and writes them into the associated
-#' DuckDB database.
+#' Processes all snapshot .rds files in a directory, saves scraped content to
+#' Parquet archives, and updates the DuckDB database with the associated metadata.
 #'
-#' This function is designed for use in a snapshot‑based web‑scraping workflow:
-#' each snapshot contains scraped page data (`content`) and extracted hyperlinks
-#' (`links`). The function:
+#' This function integrates snapshot data into the primary storage workflow.
+#' It reads individual snapshot files, consolidates them, and separates metadata
+#' from raw content. While metadata is written to the results table in DuckDB,
+#' the raw HTML and link information are persisted in compressed Parquet files.
 #'
-#' - Reads all pending snapshot files
-#' - Normalizes and merges the content and link tables
-#' - Inserts/updates records in the DuckDB tables `results` and `links`
-#' - Ensures hierarchical link levels are respected
-#' - Removes snapshot files after successful processing
+#' @param snapshot_dir Character path to the directory containing snapshot .rds files.
+#' @param data_dir Character path to the directory for Parquet storage.
+#' @param db_file Character path to the existing DuckDB database file.
 #'
-#' The function is *side‑effect heavy*: it performs database writes, link‑level
-#' conflict resolution, and deletes files once processed.
-#'
-#' @param snapshot_dir `character(1)`
-#'   Path to the directory containing snapshot `.rds` files.
-#'   All files matching `snap_*.rds` (recursively) will be processed.
-#'
-#' @param db_file `character(1)`
-#'   Path to the DuckDB database file. Must already exist.
-#'
-#' @return
-#' `invisible(TRUE)` on success, or `invisible(NULL)` if no snapshots exist.
-#'
-#' On errors during database insertion, the function prints a diagnostic message
-#' and leaves the snapshot files untouched.
-#'
-#' @details
-#' Snapshot files are expected to contain a list with at least two elements:
-#'
-#' - `content`: A `data.table` holding scraped page data
-#' - `links`: A list of link records, each convertible to `data.table`
-#'
-#' The `links` table must contain at least:
-#'
-#' - `href` — Discovered link
-#' - `label` — Link label
-#' - `source_url` — URL from which the link was extracted
-#' - `scraped_at` — The timestamp of scraping
-#'
-#' Link levels are assigned as follows:
-#'
-#' - Level 1 for previously unseen base URLs
-#' - Otherwise, `max(existing level) + 1`
-#'
-#' Updates use `INSERT ... ON CONFLICT (...) DO UPDATE`, but only when the
-#' proposed new level is *lower* than the existing one (i.e., a "shorter path").
+#' @return Invisible TRUE on success, or invisible NULL if no snapshots exist.
 #'
 #' @section Database Requirements:
-#' The DuckDB database must contain the following tables:
+#' The DuckDB database must contain a results table compatible with the
+#' metadata structure. The function automatically triggers a view update upon
+#' successful data insertion.
 #'
-#' - `results` with compatible columns matching `batch_content`
-#' - `links` with columns `href`, `label`, `source_url`, `level`, `scraped_at`
 #' @keywords internal
 #' @noRd
-.handle_snapshots <- function(snapshot_dir, db_file) {
-  . <- scraped_at <- src <- url_redirect <- status <- NULL
+.handle_snapshots <- function(snapshot_dir, data_dir, db_file) {
+  . <- scraped_at <- src <- url_redirect <- status <- links <- url_actual <- NULL
+
+  if (!fs::dir_exists(snapshot_dir)) {
+    return(NULL)
+  }
 
   snaps <- fs::dir_ls(
     path = snapshot_dir,
@@ -74,13 +41,11 @@
     return(invisible(NULL))
   }
 
-  parquet_dir <- .parquet_data_dir(snapshot_dir)
-
   # Connect to DB
   conn <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = FALSE))
   on.exit(DBI::dbDisconnect(conn, shutdown = TRUE), add = TRUE)
 
-  # Split files into batches
+  # Process files in batches to manage memory consumption
   snap_groups <- split(snaps, ceiling(seq_along(snaps) / batch_size))
   total_groups <- length(snap_groups)
   for (i in seq_along(snap_groups)) {
@@ -96,33 +61,27 @@
       expr = {
         # Read data from current batch
         raw_data <- lapply(group, function(f) {
-          tmp <- base::readRDS(f)
-          links <- data.table::rbindlist(tmp$links)
-          tmp$links <- NULL
-          list(content = data.table::setDT(tmp), links = links)
+          base::readRDS(f)
         })
+        batch_content <- rbindlist(raw_data)
 
-        batch_content <- data.table::rbindlist(lapply(
-          raw_data, `[[`, "content"
-        ))
-        batch_links <- data.table::rbindlist(lapply(raw_data, `[[`, "links"))
+        batch_content[, status := ifelse(status == TRUE, "success", "failed_scraping")]
+        batch_content$scraped_at <- as.POSIXct(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), tz = "UTC")
 
         parquet_filename <- sprintf("batch_%s.parquet", format(Sys.time(), "%Y%m%d_%H%M%S_%s"))
-        parquet_path <- fs::path(parquet_dir, parquet_filename)
+        parquet_path <- fs::path(data_dir, parquet_filename)
 
-        # Write Url, Timestamp and scraped Source compressed as Parquet-Files
+        # Save raw content and link lists as compressed Parquet files
         arrow::write_parquet(
-          x = batch_content[, .(url, scraped_at, src)],
+          x = batch_content[, .(url, scraped_at, src, links)],
           sink = parquet_path,
           compression = "zstd"
         )
 
-        # Update View
-        .setup_full_results_view(conn, snapshot_dir)
-
-        # Prepare content for "results" table (only Metadata, no Src!)
+        # Extract metadata for the results table (no src!)
         meta_content <- batch_content[, .(
           url,
+          url_actual,
           url_redirect,
           status,
           file_path = parquet_path,
@@ -130,55 +89,26 @@
         )]
 
         DBI::dbWithTransaction(conn, {
-          # Write Content
-          DBI::dbWriteTable(
-            conn = conn,
-            name = "tmp_content",
-            value = meta_content,
-            overwrite = TRUE,
-            temporary = TRUE
-          )
+          # Remove outdated entries for processed URLs
+          urls_in_batch <- paste0("'", unique(meta_content$url), "'", collapse = ",")
           DBI::dbExecute(
             conn = conn,
-            statement = "INSERT OR REPLACE INTO results SELECT * FROM tmp_content"
+            statement = glue::glue(sql_queries$delete_results_by_url, urls_in_batch = urls_in_batch)
           )
 
-          if (nrow(batch_links) > 0) {
-            # Add links to temporary table
-            DBI::dbWriteTable(
-              conn = conn,
-              name = "tmp_links_raw",
-              value = batch_links,
-              overwrite = TRUE,
-              temporary = TRUE
-            )
+          # Insert current batch metadata
+          DBI::dbWriteTable(
+            conn = conn,
+            name = "results",
+            value = meta_content,
+            append = TRUE
+          )
 
-            # Compute level in SQL (faster than in R)
-            DBI::dbExecute(
-              conn = conn,
-              statement = "
-              INSERT INTO links (href, label, source_url, level, scraped_at)
-              SELECT
-                  t.href,
-                  t.label,
-                  t.source_url,
-                  COALESCE(l.level + 1, 2) as level,
-                  t.scraped_at
-              FROM tmp_links_raw t
-              LEFT JOIN links l ON t.source_url = l.href
-              ON CONFLICT (href, scraped_at) DO UPDATE SET
-                  level = EXCLUDED.level,
-                  source_url = EXCLUDED.source_url
-              WHERE EXCLUDED.level < links.level
-          "
-            )
-          }
-
-          # Cleanup
-          DBI::dbExecute(conn = conn, statement = "DROP TABLE IF EXISTS tmp_content")
-          DBI::dbExecute(conn = conn, statement = "DROP TABLE IF EXISTS tmp_links_raw")
+          # Refresh database views to include new data
+          .setup_database_views(conn, data_dir)
         })
 
+        # Remove processed snapshot files
         fs::file_delete(group)
         return(TRUE)
       },
@@ -207,7 +137,7 @@
 #'
 #' @param dt A `data.table` containing scraped data and extracted links.
 #' @param chunk_id `integer(1)`
-#'   Identifier of the current chunk. Used in file naming as `snap_chunkXX_*`.
+#'   Identifier of the current chunk. Used in output file names.
 #' @param snapshot_dir `character(1)`
 #'   Directory where the snapshot file will be written.
 #'
@@ -218,7 +148,7 @@
 .write_snapshot <- function(dt, chunk_id, snapshot_dir) {
   stopifnot(data.table::is.data.table(dt))
   ts <- format(Sys.time(), "%Y%m%dT%H%M%S")
-  f <- fs::path(snapshot_dir, sprintf("snap_chunk%02d_%s.rds", chunk_id, ts))
+  f <- fs::path(snapshot_dir, glue::glue("snap_chunk{chunk_id}_{ts}.rds"))
   base::saveRDS(dt, file = f)
   return(dt[0])
 }
