@@ -336,6 +336,10 @@ UrlScraper <- R6::R6Class(
     #'
     #' @return The `UrlScraper` object (invisibly).
     update_urls = function(urls, force = FALSE) {
+      if (length(urls) == 0) {
+        return(invisible(self))
+      }
+
       # Normalize URLs
       urls_clean <- unique(vapply(urls, clean_url, FUN.VALUE = character(1)))
       dup_idx <- duplicated(urls_clean)
