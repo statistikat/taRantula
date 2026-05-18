@@ -90,11 +90,13 @@
 
         DBI::dbWithTransaction(conn, {
           # Remove outdated entries for processed URLs
-          urls_in_batch <- paste0("'", unique(meta_content$url), "'", collapse = ",")
+          batch_urls <- unique(meta_content$url)
+          placeholders <- glue::glue_collapse(rep("?", length(batch_urls)), sep = ",")
           DBI::dbExecute(
             conn = conn,
-            statement = glue::glue(sql_queries$delete_results_by_url, urls_in_batch = urls_in_batch)
-          )
+            statement = glue::glue(sql_queries$delete_results_by_url, urls_in_batch = placeholders),
+            params = as.list(batch_urls)
+          )          
 
           # Insert current batch metadata
           DBI::dbWriteTable(
