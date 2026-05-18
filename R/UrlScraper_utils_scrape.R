@@ -43,7 +43,9 @@
         final_url <- sid$current_url()
         html_source <- sid$get_page_source()
       } else {
-        req <- httr2::request(url) |> httr2::req_method("GET")
+        req <- httr2::request(url) |> 
+          httr2::req_method("GET") |>
+          httr2::req_timeout(30)
         resp <- httr2::req_perform(req)
         final_url <- resp$url
         html_source <- httr2::resp_body_string(resp)
