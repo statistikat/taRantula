@@ -61,7 +61,7 @@
           expr = {
             robotstxt::robotstxt(
               domain = d,
-              user_agent = robots_config$user_agent,
+              user_agent = user_agent,
               warn = FALSE, force = TRUE
             )
           }, error = function(e) NULL
