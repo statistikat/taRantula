@@ -233,7 +233,7 @@ UrlScraper <- R6::R6Class(
 
           # Batch and chunk URL distribution for parallel workers
           current_batch <- head(urls_todo, batch_size)
-          current_nr_workers <- min(nrow(current_batch), nr_workers)
+          current_nr_workers <- min(length(current_batch), nr_workers)
           chunks <- private$split_into_chunks(current_batch, current_nr_workers)
           conf_list <- as.list(private$config)
 
