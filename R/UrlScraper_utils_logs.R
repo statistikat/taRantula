@@ -22,14 +22,14 @@
   .parse_single_logfile <- function(p) {
     if (length(p) >= 3L) {
       data.frame(
-        progress_time = as.POSIXct(p[[1]], tz = Sys.timezone()),
+        progress_time = as.POSIXct(p[[1]], tz = "UTC"),
         chunk_id = suppressWarnings(as.integer(p[[2]])),
         url = p[[3]],
         stringsAsFactors = FALSE
       )
     } else {
       data.frame(
-        progress_time = as.POSIXct(p[[1]], tz = Sys.timezone()),
+        progress_time = as.POSIXct(p[[1]], tz = "UTC"),
         chunk_id = NA_integer_,
         url = p[[2]],
         stringsAsFactors = FALSE

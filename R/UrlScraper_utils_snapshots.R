@@ -66,8 +66,9 @@
         batch_content <- rbindlist(raw_data)
 
         batch_content[, status := ifelse(status == TRUE, "success", "failed_scraping")]
-        batch_content$scraped_at <- as.POSIXct(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), tz = "UTC")
-
+        ts <- as.POSIXct(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), tz = "UTC")
+        batch_content[is.na(scraped_at), scraped_at := ts]
+        
         parquet_filename <- sprintf("batch_%s.parquet", format(Sys.time(), "%Y%m%d_%H%M%S_%s"))
         parquet_path <- fs::path(data_dir, parquet_filename)
 
