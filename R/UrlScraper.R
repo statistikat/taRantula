@@ -698,14 +698,13 @@ UrlScraper <- R6::R6Class(
         filter = NULL
       )
 
-      filter_links <- paste(filter_links, collapse = "|")
-      # query_filter_links <- glue::glue("regexp_matches(LOWER(COALESCE(HREF, '')), '({filter_links})') OR
-      #                                   regexp_matches(LOWER(COALESCE(LABEL, '')), '({filter_links})')")
-
-      results_links <- results_links[
-        href %ilike% filter_links | label %ilike% filter_links
-      ]
-
+      if (!is.null(filter_links)) {
+        filter_links <- paste(filter_links, collapse = "|")
+        results_links <- results_links[
+          href %ilike% filter_links | label %ilike% filter_links
+        ]
+      }
+      
       # Extract relevant document content
       results_docs <- .extract_results(
         db_file = private$config$db_file,
