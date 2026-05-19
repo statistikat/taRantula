@@ -241,7 +241,7 @@ UrlScraper <- R6::R6Class(
           if (is_dev) {
             f_pkgs <- c(
               "progressr", "data.table", "selenium", "fs", "jsonlite",
-              "xml2", "rvest", "httr2", "stats"
+              "xml2", "rvest", "httr2", "stats", "cli", "glue"
             )
             f_list <- list(
               ".worker_scrape" = .worker_scrape,
@@ -258,6 +258,7 @@ UrlScraper <- R6::R6Class(
               environment(fn) <- .GlobalEnv
               return(fn)
             })
+            f_globals$chunks <- chunks
             f_globals$conf_list <- conf_list
             f_globals$p <- p
           } else {
@@ -279,7 +280,7 @@ UrlScraper <- R6::R6Class(
                   )
                 },
                 error = function(e) {
-                  message("FATAL WORKER ERROR: ", e$message)
+                  cli::cli_alert_danger("FATAL WORKER ERROR [chunk {x}]: {e$message}")
                   return(FALSE)
                 }
               )
@@ -704,7 +705,7 @@ UrlScraper <- R6::R6Class(
           href %ilike% filter_links | label %ilike% filter_links
         ]
       }
-      
+
       # Extract relevant document content
       results_docs <- .extract_results(
         db_file = private$config$db_file,
