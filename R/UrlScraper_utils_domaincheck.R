@@ -17,7 +17,7 @@
 #'
 #' @keywords internal
 #' @noRd
-.handle_domaincheck <- function(db_file, workers = 20, timeout = 5) {
+.handle_domaincheck <- function(db_file, workers = 20, timeout = 15) {
   conn <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = FALSE))
   on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
 
