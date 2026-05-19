@@ -30,7 +30,11 @@
   stopifnot(fs::dir_exists(config$base_dir))
 
   # Define project directory and ensure its existence
-  config$project_dir <- fs::path(config$base_dir, config$project)
+  if (fs::is_absolute_path(config$project)) {
+    config$project_dir <- config$project
+  } else {
+    config$project_dir <- fs::path(config$base_dir, config$project)
+  }
   fs::dir_create(config$project_dir, recurse = TRUE)
 
   # Define database path
