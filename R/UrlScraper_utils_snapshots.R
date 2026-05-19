@@ -66,6 +66,7 @@
         batch_content <- rbindlist(raw_data)
 
         batch_content[, status := ifelse(status == TRUE, "success", "failed_scraping")]
+        batch_content <- unique(batch_content, by = "url", fromLast = TRUE)
         ts <- as.POSIXct(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), tz = "UTC")
         batch_content[is.na(scraped_at), scraped_at := ts]
         
@@ -97,7 +98,7 @@
             conn = conn,
             statement = glue::glue(sql_queries$delete_results_by_url, urls_in_batch = placeholders),
             params = as.list(batch_urls)
-          )          
+          )
 
           # Insert current batch metadata
           DBI::dbWriteTable(
@@ -124,7 +125,12 @@
     )
 
     if (!res) {
-      break
+      cli::cli_alert_warning(
+        "Snapshot batch {i}/{total_groups} failed. Moving to _failed/."
+      )
+      failed_dir <- fs::path(snapshot_dir, "_failed")
+      fs::dir_create(failed_dir)
+      fs::file_move(group, failed_dir)
     }
     gc()
   }

@@ -43,7 +43,7 @@
         final_url <- sid$current_url()
         html_source <- sid$get_page_source()
       } else {
-        req <- httr2::request(url) |> 
+        req <- httr2::request(url) |>
           httr2::req_method("GET") |>
           httr2::req_timeout(30)
         resp <- httr2::req_perform(req)
@@ -64,9 +64,9 @@
       )
     },
     error = function(e) {
-      cli::cli_alert_danger(
-        glue::glue("Error when scraping URL {url}: {e$message}")
-      )
+      #cli::cli_alert_danger(
+      #  glue::glue("Error when scraping URL {url}: {e$message}")
+      #)
       # Return failure metadata structure
       data.table::data.table(
         url = url,
@@ -129,7 +129,7 @@
   }
 
   # Initialize a Selenium session or prepare request headers
-  .create_sid <- function(cfg, timeout = 300) {
+  .create_sid <- function(cfg, timeout = 30) {
     if (!isTRUE(cfg$selenium$use_selenium)) {
       return(c(user_agent = cfg$httr2$user_agent))
     }
@@ -141,8 +141,8 @@
           pageLoadStrategy = sel_cfg$pageLoadStrategy,
           timeouts = list(
             implicit = 5000,
-            pageLoad = 60000,
-            script = 30000
+            pageLoad = 25000,
+            script = 25000
           )
         )
 
@@ -180,14 +180,18 @@
       prefix <- if (is_retry) "Retry " else ""
       if (amount > 0) {
         p(
-          message = glue::glue("{prefix}W{chunk_id}: {basename(u_str)}"),
+          message = glue::glue("{prefix}W{chunk_id}: {basename(u_str)}"), 
           amount = amount
         )
       }
     }
 
     # Write Logfile
-    status_suffix <- if (!is.null(status)) glue::glue("\tRETRY_{status}") else ""
+    status_suffix <- if (!is.null(status)) {
+      glue::glue("\tRETRY_{status}")
+    } else {
+      ""
+    }
     cat(
       glue::glue("{format(Sys.time())}\t{chunk_id}\t{u_str}{status_suffix}"),
       file = progress_file,
@@ -327,6 +331,8 @@
           amount = 1
         )
 
+        # Remove any previous entry (first scraping attempt)
+        out <- out[url != u]
         out <- data.table::rbindlist(
           l = list(out, rec),
           use.names = TRUE,
