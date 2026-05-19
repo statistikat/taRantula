@@ -594,9 +594,7 @@ UrlScraper <- R6::R6Class(
   private = list(
     config = list(),
     is_dev = function() {
-      env_dev <- tolower(Sys.getenv("TARANTULA_DEV_MODE")) == "true"
-      is_installed <- system.file(package = "taRantula") != ""
-      return(env_dev || !is_installed)
+      pkgload::is_dev_package("taRantula")
     },
     cleanup = function() {
       # Handy Snapshots and Logs
@@ -651,8 +649,8 @@ UrlScraper <- R6::R6Class(
       # Ensure k is within a valid range
       k <- max(1L, min(k, n))
 
-      # Create a vector of chunk IDs
-      idx <- ((seq_len(n) - 1L) %% k) + 1L
+      # Create block IDs by repeating chunk indices up to length n
+      idx <- sort(rep(seq_len(k), length.out = n))
 
       # Split based on the detected structure
       return(split(x, idx))
