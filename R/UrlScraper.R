@@ -301,13 +301,15 @@ UrlScraper <- R6::R6Class(
       # Summarize performance metrics
       ii <- self$url_info
       elapsed <- difftime(Sys.time(), start_time, units = "secs")
-      total_count <- ii$nr_urls - ii$nr_failed_domaincheck - ii$nr_blocked
-
+      attempted <- ii$nr_scraped + ii$nr_failed_scraping
+      pct <- if (attempted > 0) 100 * ii$nr_scraped / attempted else 0
       cli::cli_alert_info(
-        text = glue::glue(paste(
-          "Done. Scraped {ii$nr_scraped}/{total_count} URLs ({.fmt(100 * (ii$nr_scraped / total_count), digits = 1)}%).",
+        text = glue::glue(
+          "Done. {ii$nr_scraped} succeeded, {ii$nr_failed_scraping} failed / ",
+          "{attempted} attempted ({.fmt(pct, digits = 1)}% Success rate). ",
+          "{ii$nr_failed_domaincheck} domain dead, {ii$nr_blocked} blocked. ",
           "Elapsed: {.fmt(elapsed)}s"
-        ))
+        )
       )
 
       return(invisible(self))
