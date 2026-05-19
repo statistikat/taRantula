@@ -33,8 +33,8 @@ Imports:
     progressr,
     selenium,
     glue,
-    robotstxt
-RoxygenNote: 7.3.3
+    robotstxt,
+    pkgload
 Suggests: 
     testthat (>= 3.0.0),
     knitr,
@@ -50,3 +50,4 @@ URL: https://statistikat.github.io/taRantula, https://github.com/statistikat/taR
 BugReports: https://github.com/statistikat/taRantula/issues
 VignetteBuilder: knitr
 Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

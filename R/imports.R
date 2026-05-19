@@ -9,4 +9,5 @@
 #' @importFrom stringr str_match_all
 #' @importFrom rlang !!!
 #' @importFrom progressr with_progress
+#' @importFrom pkgload is_dev_package
 NULL
