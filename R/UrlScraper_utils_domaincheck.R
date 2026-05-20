@@ -20,48 +20,54 @@
 .handle_domaincheck <- function(db_file, workers = 20, timeout = 15) {
   conn <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = FALSE))
   on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
-
+  
   # Retrieve all URLs currently awaiting processing
   df_urls <- DBI::dbGetQuery(
     conn = conn,
     statement = sql_queries$get_todo_urls
   )
-
+  
   if (nrow(df_urls) == 0) {
     return(NULL)
   }
-
+  
   # Extract unique domains for health check
   df_urls$domain <- get_domain(df_urls$url)
   domains <- unique(df_urls$domain)
-
+  
   # Construct HTTP HEAD request objects for parallel execution
   reqs <- lapply(domains, function(d) {
     httr2::request(d) |>
       httr2::req_method("HEAD") |>
       httr2::req_timeout(timeout) |>
+      httr2::req_user_agent(.default_useragent()) |>
       httr2::req_error(is_error = function(resp) FALSE)
   })
-
+  
   # Execute reachability tests in parallel
   resps <- httr2::req_perform_parallel(
     reqs = reqs,
     max_active = workers,
     on_error = "continue"
   )
-
+  
   # Analyze response status to identify alive domains
   alive_status <- sapply(resps, function(r) {
     if (inherits(r, "httr2_response")) {
-      return(httr2::resp_status(r) < 400)
+      status <- httr2::resp_status(r)
+      # 401, 403, 405 -> server answers actively
+      if (status < 400 || status %in% c(401, 403, 405)) {
+        return(TRUE)
+      }
+      return(FALSE)
     }
     return(FALSE)
   })
-
+  
   # Get domains and URLs that failed the reachability test
   dead_domains <- domains[!alive_status]
   dead_urls <- subset(df_urls, df_urls$domain %in% dead_domains)$url
-
+  
   # Update database status for non-reachable domains
   if (length(dead_urls) > 0) {
     placeholders <- paste(rep("?", length(dead_urls)), collapse = ",")
