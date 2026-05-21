@@ -18,6 +18,17 @@
 #' @keywords internal
 #' @noRd
 .handle_domaincheck <- function(db_file, workers = 20, timeout = 15) {
+  .harmonize_url <- function(urls) {
+    parsed <- urltools::url_parse(urls)
+    
+    # Build outputs
+    out <- paste0(parsed$scheme, "://", parsed$domain)
+    
+    # Missing scheme -> use domain only
+    missing_scheme <- is.na(parsed$scheme)
+    out[missing_scheme] <- parsed$domain[missing_scheme]
+    return(out)
+  }  
   conn <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = FALSE))
   on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
   
@@ -31,16 +42,21 @@
     return(NULL)
   }
   
-  # Extract unique domains for health check
-  df_urls$domain <- get_domain(df_urls$url)
+  # Extract simple-urls for health check
+  df_urls$domain <- .harmonize_url(df_urls$url)
   domains <- unique(df_urls$domain)
-  
+
   # Construct HTTP HEAD request objects for parallel execution
   reqs <- lapply(domains, function(d) {
     httr2::request(d) |>
       httr2::req_method("HEAD") |>
       httr2::req_timeout(timeout) |>
       httr2::req_user_agent(.default_useragent()) |>
+      httr2::req_options(
+        ssl_verifypeer = 0L,
+        ssl_verifyhost = 0L,
+        followlocation = 0L
+      ) |>
       httr2::req_error(is_error = function(resp) FALSE)
   })
   
@@ -53,14 +69,12 @@
   
   # Analyze response status to identify alive domains
   alive_status <- sapply(resps, function(r) {
+    # answer -> (sub) urls may exist
     if (inherits(r, "httr2_response")) {
-      status <- httr2::resp_status(r)
-      # 401, 403, 405 -> server answers actively
-      if (status < 400 || status %in% c(401, 403, 405)) {
-        return(TRUE)
-      }
-      return(FALSE)
+      return(TRUE)
     }
+    
+    # No answer (dns-error, connection refused, timeout, ...) -> domain not alive
     return(FALSE)
   })
   
@@ -76,6 +90,7 @@
       statement = glue::glue(sql_queries$status_update_failed),
       params = as.list(dead_urls)
     )
-    cli::cli_alert_info("Marked {length(dead_urls)} URLs as failed due to non-reachable domain(s)")
   }
+  cli::cli_alert_info("Marked {length(dead_urls)} URLs as failed due to non-reachable domain(s)")
+  return(invisible(NULL))
 }
