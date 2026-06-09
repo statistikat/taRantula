@@ -1,10 +1,10 @@
-pandoc: 3.1.11
+pandoc: 3.8.3
 pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
   Config: Config.html
   Intro: Intro.html
-last_built: 2026-03-27T08:48Z
+last_built: 2026-06-09T10:50Z
 urls:
   reference: https://statistikat.github.io/taRantula/reference
   article: https://statistikat.github.io/taRantula/articles

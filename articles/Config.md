@@ -28,6 +28,7 @@ You can initialize with defaults or override specific values
 immediately.
 
 ``` r
+
 library(taRantula)
 
 # Basic initialization
@@ -46,6 +47,7 @@ The class supports a convenient `$`-syntax and character vector syntax
 for nested paths.
 
 ``` r
+
 # Accessing nested values
 cfg$get("selenium$host")
 cfg$get(c("selenium", "port"))
@@ -64,6 +66,7 @@ The Google Search configuration which can be initialized with function
 result attributes.
 
 ``` r
+
 # Set up a Google Search task
 gcfg <- paramsGoogleSearch(
   path = "~/google_results",
@@ -86,6 +89,7 @@ settings with colleagues or use them in a CI/CD pipeline.
 ### Exporting
 
 ``` r
+
 # Save your current configuration
 cfg$export("my_config.yaml")
 
@@ -96,6 +100,7 @@ cfg$write_defaults("template.yaml")
 ### Importing
 
 ``` r
+
 # Recreate a scraper state from a YAML file
 new_cfg <- paramsScraper(config_file = "my_config.yaml")
 ```
@@ -109,6 +114,7 @@ attempt to set an invalid value, the package will throw an informative
 error immediately.
 
 ``` r
+
 # This will trigger an error (port must be an integerish number <= 65535)
 try(cfg$set("selenium$port", 99999))
 

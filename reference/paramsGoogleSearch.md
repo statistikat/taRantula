@@ -64,14 +64,13 @@ A `cfg_googlesearch` object.
 
 ## Super class
 
-[`taRantula::params_manager`](https://statistikat.github.io/taRantula/reference/params_manager.md)
--\> `cfg_googlesearch`
+`params_manager` -\> `cfg_googlesearch`
 
 ## Methods
 
 ### Public methods
 
-- [`cfg_googlesearch$new()`](#method-cfg_googlesearch-new)
+- [`cfg_googlesearch$new()`](#method-cfg_googlesearch-initialize)
 
 - [`cfg_googlesearch$defaults()`](#method-cfg_googlesearch-defaults)
 
@@ -79,18 +78,18 @@ A `cfg_googlesearch` object.
 
 Inherited methods
 
-- [`taRantula::params_manager$export()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-export)
-- [`taRantula::params_manager$get()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-get)
-- [`taRantula::params_manager$load_config()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-load_config)
-- [`taRantula::params_manager$print()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-print)
-- [`taRantula::params_manager$set()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-set)
-- [`taRantula::params_manager$show_config()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-show_config)
-- [`taRantula::params_manager$update()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-update)
-- [`taRantula::params_manager$write_defaults()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-write_defaults)
+- `params_manager$export()`
+- `params_manager$get()`
+- `params_manager$load_config()`
+- `params_manager$print()`
+- `params_manager$set()`
+- `params_manager$show_config()`
+- `params_manager$update()`
+- `params_manager$write_defaults()`
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `cfg_googlesearch$new()`
 
 Initialize a new `cfg_googlesearch` configuration object.
 
@@ -176,7 +175,7 @@ A configured object of class `cfg_googlesearch`.
 
 ------------------------------------------------------------------------
 
-### Method `defaults()`
+### `cfg_googlesearch$defaults()`
 
 Return the default configuration settings for Google Custom Search.
 
@@ -214,7 +213,7 @@ A named list containing default values for:
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `cfg_googlesearch$clone()`
 
 The objects of this class are cloneable with this method.
 
@@ -252,7 +251,7 @@ cfg <- paramsGoogleSearch(
 # Return the current configuration
 cfg$show_config()
 #> $path
-#> [1] "/tmp/Rtmp4wbgiD/file1c9f46bd0ca6/reference"
+#> [1] "/tmp/Rtmplb015P/file1bfa20e2edc9/reference"
 #> 
 #> $id_col
 #> [1] "ID"
@@ -296,18 +295,18 @@ cfg$show_config()
 # Write current configuration to file
 f <- file.path(tempdir(), "config.yaml")
 cfg$export(f)
-#> ℹ Current configuration for 'cfg_googlesearch' written to '/tmp/Rtmp4wbgiD/config.yaml'.
+#> ℹ Current configuration for 'cfg_googlesearch' written to '/tmp/Rtmplb015P/config.yaml'.
 
 # Load from exported config-file and override
 cfg <- paramsGoogleSearch(config_file = f, verbose = TRUE)
-#> ℹ Configuration loaded from '/tmp/Rtmp4wbgiD/config.yaml' for cfg_googlesearch
+#> ℹ Configuration loaded from '/tmp/Rtmplb015P/config.yaml' for cfg_googlesearch
 try(file.remove(f))
 #> [1] TRUE
 
 # Return the current configuration
 cfg$show_config()
 #> $path
-#> [1] "/tmp/Rtmp4wbgiD"
+#> [1] "/tmp/Rtmplb015P"
 #> 
 #> $id_col
 #> [1] "ID"

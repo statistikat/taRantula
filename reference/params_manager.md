@@ -35,7 +35,7 @@ generator object.
 
 ### Public methods
 
-- [`params_manager$new()`](#method-params_manager-new)
+- [`params_manager$new()`](#method-params_manager-initialize)
 
 - [`params_manager$print()`](#method-params_manager-print)
 
@@ -59,7 +59,7 @@ generator object.
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `params_manager$new()`
 
 Initialize the parameter manager.
 
@@ -87,7 +87,7 @@ This loads configuration using the following precedence:
 
 ------------------------------------------------------------------------
 
-### Method [`print()`](https://rdrr.io/r/base/print.html)
+### `params_manager$print()`
 
 Print the current settings
 
@@ -97,7 +97,7 @@ Print the current settings
 
 ------------------------------------------------------------------------
 
-### Method `load_config()`
+### `params_manager$load_config()`
 
 Loads configuration: defaults \< YAML \< args
 
@@ -121,7 +121,7 @@ A list with the resulting configuration.
 
 ------------------------------------------------------------------------
 
-### Method [`get()`](https://rdrr.io/r/base/get.html)
+### `params_manager$get()`
 
 Retrieve a configuration value (supports nested paths).
 
@@ -149,7 +149,7 @@ The configuration value or `NULL` if not found.
 
 ------------------------------------------------------------------------
 
-### Method `show_config()`
+### `params_manager$show_config()`
 
 Return the complete current configuration as a list.
 
@@ -163,7 +163,7 @@ A named list representing the current configuration.
 
 ------------------------------------------------------------------------
 
-### Method `defaults()`
+### `params_manager$defaults()`
 
 Subclasses must override this method to define default settings.
 
@@ -177,7 +177,7 @@ A named list containing default configuration values.
 
 ------------------------------------------------------------------------
 
-### Method `write_defaults()`
+### `params_manager$write_defaults()`
 
 Write default configuration values to a YAML file.
 
@@ -193,7 +193,7 @@ Write default configuration values to a YAML file.
 
 ------------------------------------------------------------------------
 
-### Method `export()`
+### `params_manager$export()`
 
 Export the *current* configuration (including overrides) to YAML.
 
@@ -209,7 +209,7 @@ Export the *current* configuration (including overrides) to YAML.
 
 ------------------------------------------------------------------------
 
-### Method `set()`
+### `params_manager$set()`
 
 Updates configuration.
 
@@ -240,7 +240,7 @@ The object itself (invisibly).
 
 ------------------------------------------------------------------------
 
-### Method [`update()`](https://rdrr.io/r/stats/update.html)
+### `params_manager$update()`
 
 Recursively update configuration values from a (possibly nested) list.
 
@@ -262,7 +262,7 @@ The object itself (invisibly).
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `params_manager$clone()`
 
 The objects of this class are cloneable with this method.
 

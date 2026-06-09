@@ -102,7 +102,7 @@ and related helpers.
 
 ### Public methods
 
-- [`UrlScraper$new()`](#method-UrlScraper-new)
+- [`UrlScraper$new()`](#method-UrlScraper-initialize)
 
 - [`UrlScraper$scrape()`](#method-UrlScraper-scrape)
 
@@ -126,7 +126,7 @@ and related helpers.
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `UrlScraper$new()`
 
 Create a new `UrlScraper` object.
 
@@ -168,7 +168,7 @@ An initialized `UrlScraper` object (invisibly).
 
 ------------------------------------------------------------------------
 
-### Method `scrape()`
+### `UrlScraper$scrape()`
 
 Scrape all remaining URLs using parallel workers.
 
@@ -207,7 +207,7 @@ reflect newly scraped URLs.
 
 ------------------------------------------------------------------------
 
-### Method `update_urls()`
+### `UrlScraper$update_urls()`
 
 Update the list of URLs to be scraped.
 
@@ -249,7 +249,7 @@ The `UrlScraper` object (invisibly).
 
 ------------------------------------------------------------------------
 
-### Method `results()`
+### `UrlScraper$results()`
 
 Extract scraping results from the internal database.
 
@@ -271,7 +271,7 @@ A `data.table` containing the scraping results.
 
 ------------------------------------------------------------------------
 
-### Method `logs()`
+### `UrlScraper$logs()`
 
 Extract log entries from the internal database.
 
@@ -293,7 +293,7 @@ A `data.table` containing the log entries.
 
 ------------------------------------------------------------------------
 
-### Method `links()`
+### `UrlScraper$links()`
 
 Extract scraped links from the internal database.
 
@@ -315,7 +315,7 @@ A `data.table` containing the extracted links.
 
 ------------------------------------------------------------------------
 
-### Method `query()`
+### `UrlScraper$query()`
 
 Execute a custom SQL query against the internal DuckDB database.
 
@@ -340,7 +340,7 @@ The result of the query, typically a `data.table`.
 
 ------------------------------------------------------------------------
 
-### Method `regex_extract()`
+### `UrlScraper$regex_extract()`
 
 Extract text from scraped HTML using a regular expression.
 
@@ -410,7 +410,7 @@ typically containing the matched text and the corresponding URLs.
 
 ------------------------------------------------------------------------
 
-### Method [`stop()`](https://rdrr.io/r/base/stop.html)
+### `UrlScraper$stop()`
 
 Create a stop‑file to signal running workers to terminate gracefully.
 
@@ -432,7 +432,7 @@ Invisible `NULL`.
 
 ------------------------------------------------------------------------
 
-### Method [`close()`](https://rdrr.io/r/base/connections.html)
+### `UrlScraper$close()`
 
 Clean up resources, including snapshots and database connections.
 
@@ -461,7 +461,7 @@ Invisible `NULL`.
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `UrlScraper$clone()`
 
 The objects of this class are cloneable with this method.
 

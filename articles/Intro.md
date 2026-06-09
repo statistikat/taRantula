@@ -84,6 +84,7 @@ Run google custom search api with a queries build from enterprise name
 and addresses.
 
 ``` r
+
 Sys.setenv(
   SCRAPING_APIKEY_GOOGLE = "My_ApiKey",
   SCRAPING_ENGINE_GOOGLE = "My_Engine"
@@ -129,6 +130,7 @@ before the scraper starts. The `UrlScraper` class manages the state,
 connection to the `DuckDB` database, and the parallel worker pool.
 
 ``` r
+
 library(taRantula)
 
 # Initialize scraping parameters
@@ -175,6 +177,7 @@ catch dynamically rendered content.
   user-agent and metadata via HTTP headers.
 
 ``` r
+
 # To disable Selenium and use the httr fallback:
 cfg$set("selenium$use_selenium", FALSE)
 
@@ -208,6 +211,7 @@ Data is persisted in `DuckDB`, meaning you can access it via helper
 methods or raw SQL.
 
 ``` r
+
 # Access results as a data.table
 results_dt <- s$results()
 
@@ -225,6 +229,7 @@ example, to find an Austrian UID (VAT number) only on pages that are
 likely to be “Imprints”:
 
 ``` r
+
 # Pattern for Austrian VAT numbers
 uid_pattern <- "ATU[0-9]{8}"
 
@@ -244,6 +249,7 @@ You can feed newly discovered links back into the scraper. `taRantula`
 automatically handles duplicate detection.
 
 ``` r
+
 # Add new URLs and scrape again
 s$update_urls(urls = c("https://google.com", "https://www.statistik.at"))
 s$scrape()
@@ -256,6 +262,7 @@ signal file that tells workers to finish their current URL and exit
 cleanly.
 
 ``` r
+
 s$stop()
 ```
 
@@ -265,6 +272,7 @@ Always close the scraper to shut down the `DuckDB` connection and clean
 up temporary files.
 
 ``` r
+
 s$close()
 ```
 

@@ -82,14 +82,13 @@ See `defaults()` for the exact structure and default values.
 
 ## Super class
 
-[`taRantula::params_manager`](https://statistikat.github.io/taRantula/reference/params_manager.md)
--\> `cfg_scraper`
+`params_manager` -\> `cfg_scraper`
 
 ## Methods
 
 ### Public methods
 
-- [`cfg_scraper$new()`](#method-cfg_scraper-new)
+- [`cfg_scraper$new()`](#method-cfg_scraper-initialize)
 
 - [`cfg_scraper$defaults()`](#method-cfg_scraper-defaults)
 
@@ -97,18 +96,18 @@ See `defaults()` for the exact structure and default values.
 
 Inherited methods
 
-- [`taRantula::params_manager$export()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-export)
-- [`taRantula::params_manager$get()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-get)
-- [`taRantula::params_manager$load_config()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-load_config)
-- [`taRantula::params_manager$print()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-print)
-- [`taRantula::params_manager$set()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-set)
-- [`taRantula::params_manager$show_config()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-show_config)
-- [`taRantula::params_manager$update()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-update)
-- [`taRantula::params_manager$write_defaults()`](https://statistikat.github.io/taRantula/reference/params_manager.html#method-write_defaults)
+- `params_manager$export()`
+- `params_manager$get()`
+- `params_manager$load_config()`
+- `params_manager$print()`
+- `params_manager$set()`
+- `params_manager$show_config()`
+- `params_manager$update()`
+- `params_manager$write_defaults()`
 
 ------------------------------------------------------------------------
 
-### Method `new()`
+### `cfg_scraper$new()`
 
 Initialize a new `cfg_scraper` configuration object.
 
@@ -210,7 +209,7 @@ A new `cfg_scraper` object.
 
 ------------------------------------------------------------------------
 
-### Method `defaults()`
+### `cfg_scraper$defaults()`
 
 Return the default configuration values for the scraper.
 
@@ -228,7 +227,7 @@ A named list with the default configuration values.
 
 ------------------------------------------------------------------------
 
-### Method `clone()`
+### `cfg_scraper$clone()`
 
 The objects of this class are cloneable with this method.
 
@@ -256,11 +255,11 @@ cfg <- paramsScraper(base_dir = tempdir(), project = "my-project")
 # Write current configuration to file
 f <- tempfile(fileext = ".yaml")
 cfg$export(f)
-#> ℹ Current configuration for 'cfg_scraper' written to '/tmp/Rtmp4wbgiD/file1c9f16250eb6.yaml'.
+#> ℹ Current configuration for 'cfg_scraper' written to '/tmp/Rtmplb015P/file1bfa71407dbf.yaml'.
 
 # Load from exported config-file and override
 cfg <- paramsScraper(config_file = f, project = "some-other-proj")
-#> ℹ Configuration loaded from '/tmp/Rtmp4wbgiD/file1c9f16250eb6.yaml' for cfg_scraper
+#> ℹ Configuration loaded from '/tmp/Rtmplb015P/file1bfa71407dbf.yaml' for cfg_scraper
 try(file.remove(f))
 #> [1] TRUE
 
@@ -270,7 +269,7 @@ cfg$show_config()
 #> [1] "some-other-proj"
 #> 
 #> $base_dir
-#> [1] "/tmp/Rtmp4wbgiD/file1c9f46bd0ca6/reference"
+#> [1] "/tmp/Rtmplb015P/file1bfa20e2edc9/reference"
 #> 
 #> $urls
 #> list()

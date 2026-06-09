@@ -51,6 +51,7 @@ type validation:
 ## Installation
 
 ``` r
+
 # Install from GitHub
 remotes::install_github("statistikat/taRantula")
 ```
@@ -65,6 +66,7 @@ please refer to the **[Intro Vignette: Docker-based Selenium
 Setup](https://statistikat.github.io/taRantula/articles/Intro.html)**.
 
 ``` r
+
 library(taRantula)
 
 # 1. Setup Configuration
