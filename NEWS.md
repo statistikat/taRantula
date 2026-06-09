@@ -19,7 +19,6 @@
 
 ### Internal Quality & Documentation
 * **SQL Management**: Centralized SQL queries into a structured `sql_queries` list.
-* **Resource Cleanup**: Consolidated the `close()` and `finalize()` logic into a single private `cleanup()` method.
 * **Documentation**: Simplified Roxygen documentation and internal utility functions.
 
 
