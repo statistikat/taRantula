@@ -1,10 +1,10 @@
 # taRantula next
 
-* **Storage Refactoring:** Migrated raw scraping data (source code and link metadata) from the database to highly efficient `parquet` files located in `{project_dir}/data`.
+* **Storage Refactoring:** Migrated raw scraping data (source code and link metadata) from the database to `parquet` files located in `{project_dir}/data`.
 
 * **Database Schema Evolution:**
     * **New `urls` Table:** Dedicated storage for all URLs provided to the project.
-    * **Revised `results` Table:** Streamlined for performance; removed raw source code storage in favor of a `file_path` reference (pointing to the corresponding `parquet` file).
+    * **Revised `results` Table:**Rremoved raw source code storage in favor of a `file_path` reference (pointing to the corresponding `parquet` file).
         * **New `status` column:** Tracks URL state:
             * `"todo"`: URL is awaiting scraping.
             * `"success"`: Scraping completed; source code is available.
@@ -22,6 +22,7 @@
 * **R6-Methods Improvements:**
     * Updated the `$results()` method with a `with_src` parameter (default = `TRUE`) to switch between retrieving simple `results` table or the comprehensive `full_results` view.
     * Updated the `$results()` method by querying the new view and internally computing the hierarchy levels.
+    * New `remove_urls()` method that allows to delete pending (added but not yet scraped) URLs
     * Added new active bindings:
         * `$url_info`: Real-time counts of total, successfully scraped, pending, and failed URLs.
         * `$urls_todo`: Returns all pending URLs currently set to `"todo"`.
