@@ -1,38 +1,27 @@
-# taRantula next
+# taRantula 0.2.0
 
-* **Storage Refactoring:** Migrated raw scraping data (source code and link metadata) from the database to `parquet` files located in `{project_dir}/data`.
+### Main Features
+* **Storage Refactoring**: Moved raw scraping data (source code and link metadata) from the database into `parquet` files under `{project_dir}/data`.
+* **Database Schema Changes**:
+    * Added a `urls` table to store all target URLs.
+    * Modified the `results` table to replace raw source code storage with a `file_path` reference to the `parquet` files.
+    * Added a `status` column to track URL states (`"todo"`, `"success"`, `"failed_domain"`, `"failed_scraping"`, and `"blocked"`).
+    * Replaced the static `links` table with a dynamic view aggregating link data from `parquet` files.
+    * Added a `full_results` view that reconstructs the original `results` table structure by joining source code and link data.
+* **Scraping Workflow**: Domain reachability and `robots.txt` validations are now executed during a pre-scraping phase. Workers only process pre-validated `"todo"` URLs, removing redundant checks within parallel processes.
 
-* **Database Schema Evolution:**
-    * **New `urls` Table:** Dedicated storage for all URLs provided to the project.
-    * **Revised `results` Table:**Rremoved raw source code storage in favor of a `file_path` reference (pointing to the corresponding `parquet` file).
-        * **New `status` column:** Tracks URL state:
-            * `"todo"`: URL is awaiting scraping.
-            * `"success"`: Scraping completed; source code is available.
-            * `"failed_domain"`: Domain is unreachable; scraping not possible.
-            * `"failed_scraping"`: Scraping attempt failed.
-            * `"blocked"`: Access denied by `robots.txt`.
-    * **Dynamic Views:**
-        * Replaced the static `links` table with a dynamic view that aggregates link data directly from `parquet` files.
-        * Added a `full_results` view that mimics the previous `results` table structure while including sources and link data.
+### Interface changes (`UrlScraper`)
+* **`$results()` Method**: Added a `with_src` parameter (defaults to `TRUE`) to choose between the basic `results` table and the `full_results` view. The method now queries the new view and computes hierarchy levels internally.
+* **`$remove_urls()` Method**: Added a new method to delete pending, unscraped URLs from the queue.
+* **Active Bindings**:
+    * Added `$url_info` to return real-time counts of total, successful, pending, and failed URLs.
+    * Added `$urls_todo` to return all pending URLs marked as `"todo"`.
 
-* **Optimized Scraping Workflow:** 
-  * Moved domain reachability and `robots.txt` validation to a pre-scraping phase. 
-  * Workers now process only pre-validated `status = "todo"` URLs which allows for the removal of redundant availability checks within parallel worker processes.
+### Internal Quality & Documentation
+* **SQL Management**: Centralized SQL queries into a structured `sql_queries` list.
+* **Resource Cleanup**: Consolidated the `close()` and `finalize()` logic into a single private `cleanup()` method.
+* **Documentation**: Simplified Roxygen documentation and internal utility functions.
 
-* **R6-Methods Improvements:**
-    * Updated the `$results()` method with a `with_src` parameter (default = `TRUE`) to switch between retrieving simple `results` table or the comprehensive `full_results` view.
-    * Updated the `$results()` method by querying the new view and internally computing the hierarchy levels.
-    * New `remove_urls()` method that allows to delete pending (added but not yet scraped) URLs
-    * Added new active bindings:
-        * `$url_info`: Real-time counts of total, successfully scraped, pending, and failed URLs.
-        * `$urls_todo`: Returns all pending URLs currently set to `"todo"`.
-
-* **Maintainability & Code Quality:**
-    * Centralized all SQL queries into a structured `sql_queries` list for improved maintainability.
-    * Unified the cleanup process: `close()` and `finalize()` methods now share a single underlying private `cleanup()` method.
-    * Refinement and simplification of Roxygen documentation and various utility/helper functions.
-
-- [todo] Implement `$vacuum()` method to remove old/expired results from `parquet` Files; 
 
 # taRantula 0.1.0
 

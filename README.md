@@ -1,32 +1,32 @@
 # taRantula
 [![check](https://github.com/statistikat/taRantula/actions/workflows/check.yaml/badge.svg)](https://github.com/statistikat/taRantula/actions/workflows/check.yaml)
 
-**taRantula** is an `R` package designed for robust, large-scale web scraping. It combines the flexibility of Selenium with the speed of `httr`, backed by a persistent DuckDB storage engine to ensure data integrity.
+**taRantula** is an `R` package for large-scale web scraping. It integrates Selenium for JavaScript-rendered pages and `httr2` for static content, using DuckDB and Parquet files for persistent storage.
 
 ---
 
 ## Key Features
 
-* **Hybrid Scraping Engine**: Seamlessly switch between **Selenium 4** (for JS-heavy sites) and **httr** (for high-speed static content).
-* **Persistent Storage**: All results are written directly to a **DuckDB** backend, allowing for SQL-based querying and zero data loss.
-* **Selenium Grid Ready**: Optimized for containerized Hub/Node architectures and high-memory environments.
-* **Fault Tolerance**: Features a snapshotting mechanism to resume interrupted jobs from the last stable state.
-* **Parallel Processing**: Scales across multiple workers using the `future` framework.
-* **Regex Data Mining**: High-performance extraction of emails, VAT/UID numbers, and custom patterns directly from your collected data.
+* **Dual Engines**: Switches between **Selenium 4** (for dynamic JavaScript sites) and **httr2** (for fast static content extraction).
+* **Persistent Storage**: Stores scraped data in **Parquet** format, managed via a **DuckDB** backend for SQL-based querying and crash resilience.
+* **Selenium Grid Support**: Configured for containerized Hub/Node architectures and high-memory environments.
+* **Fault Tolerance**: Includes a snapshotting mechanism to resume interrupted scraping jobs from the last saved state.
+* **Parallel Processing**: Distributes workloads across multiple workers using the `future` framework.
+* **Regex Extraction**: Extracts emails, VAT/UID numbers, and custom text patterns directly from collected data.
 
 ## Configuration (`params_manager`)
 
-The package uses a robust, `R6`-based configuration system with strict type validation:
+The package uses an `R6`-based configuration system with strict type validation:
 
-* **`paramsScraper()`**: General web crawling and JS rendering settings.
-* **`paramsGoogleSearch()`**: Specialized config for Google Search API and rate-limit handling.
-* **YAML Support**: Easily export or import configurations for reproducible scraping pipelines.
+* **`paramsScraper()`**: Configures general web crawling and browser rendering settings.
+* **`paramsGoogleSearch()`**: Configures Google Search queries and rate-limit handling.
+* **YAML Support**: Imports and exports configuration files for reproducible pipelines.
 
 ## Compliance and Safety
 
-* **Robots.txt Enforcement**: Automated checking with internal caching to respect site owner preferences.
+* **Robots.txt Enforcement**: Automated parsing with internal caching to respect site permissions.
 * **Graceful Termination**: Signaling mechanisms ensure workers exit cleanly without corrupting the database.
-* **Redirect Detection**: Logs and tracks URL changes from request to final browser state.
+* **Redirect Tracking**: Logs and tracks URL changes from the initial request to the final browser state.
 
 ---
 
@@ -39,33 +39,36 @@ remotes::install_github("statistikat/taRantula")
 
 ## Quick Start
 
-Below is a basic example of how to initialize a scraping job using the Selenium engine and DuckDB storage. 
-
-For advanced users looking to run this in a containerized environment, please refer to the **[Intro Vignette: Docker-based Selenium Setup](https://statistikat.github.io/taRantula/articles/Intro.html)**.
+For deployment in containerized environments, see the **[Intro Vignette: Docker-based Selenium Setup](https://statistikat.github.io/taRantula/articles/Intro.html)**.
 
 ```r
 library(taRantula)
 
-# 1. Setup Configuration
+# Configure settings
 cfg <- paramsScraper()
 cfg$set("selenium$host", "localhost")
 cfg$set("selenium$port", 4444L)
 cfg$set("storage$path", "scraping_results.duckdb")
 
-# 2. Initialize the Scraper
+# Define target URLs
+cfg$set("urls", c("https://www.statistik.at", "https://r-project.org"))
+
+# Initialize the scraper
 scraper <- UrlScraper$new(config = cfg)
 
-# 3. Define URLs and Run
-urls <- c("[https://example.com](https://example.com)", "[https://r-project.org](https://r-project.org)")
-scraper$run(urls)
+# Execute job
+scraper$scrape()
 
-# 4. Extract Data (e.g., Email addresses)
+# Extract data using regex (e.g., emails)
 emails <- scraper$regex_extract(pattern = "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+")
 
-# 5. Graceful Stop
+# Retrieve full results
+results <- scraper$results()
+
+# Shut down cleanly
 scraper$stop()
 ```
 
 ## Production Deployment
 
-For production environments, the package includes `docker-compose` templates to spin up a **Selenium Grid** alongside your R environment. Detailed instructions are available in the documentation vignettes.
+The package includes `docker-compose` templates to deploy a **Selenium Grid** alongside the `R` environment. Detailed instructions are available in the documentation vignettes.
