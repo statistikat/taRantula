@@ -241,8 +241,17 @@ You can feed newly discovered links back into the scraper. `taRantula` automatic
 
 ```{r update}
 # Add new URLs and scrape again
-s$update_urls(urls = c("https://google.com", "https://www.statistik.at"))
+s$update_urls(urls = c("https://google.com", "https://www.statistik.at", "https://ec.europa.eu/eurostat"))
 s$scrape()
+```
+
+#### Removing Pending URLs
+
+If you accidentally queued links or want to prune the queue before the next scraping run, you can remove URLs that are still marked as `"todo"`. Any links that have already been scraped or blocked will remain untouched.
+
+```{r remove}
+# Remove specific pending URLs from the queue
+s$remove_urls(urls = c("https://ec.europa.eu/eurostat"))
 ```
 
 #### Graceful Termination

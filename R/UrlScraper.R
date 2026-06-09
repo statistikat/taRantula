@@ -395,6 +395,53 @@ UrlScraper <- R6::R6Class(
     },
 
     #' @description
+    #' Remove pending URLs from the queue.
+    #'
+    #' @details
+    #' This method deletes URLs from the database that match the provided vector 
+    #' and currently have a status of "todo" (added but not 
+    #' yet processed). URLs that have already been scraped or failed validation 
+    #' remain untouched.
+    #'
+    #' @param urls A character vector of URLs to remove from the pending queue.
+    #'
+    #' @return The `UrlScraper` object (invisibly).
+    remove_urls = function(urls) {
+      if (length(urls) == 0) {
+        return(invisible(self))
+      }
+      
+      # Normalize URLs to match database format
+      urls_clean <- unique(vapply(urls, clean_url, FUN.VALUE = character(1)))
+      
+      conn <- DBI::dbConnect(duckdb::duckdb(private$config$db_file, read_only = FALSE))
+      on.exit(DBI::dbDisconnect(conn, shutdown = TRUE))
+      
+      # Capture state for summary reporting
+      stats_before <- self$url_info
+      
+      # Execute parameterized deletion
+      DBI::dbWithTransaction(conn, {
+        DBI::dbExecute(conn, sql_queries$delete_todo_urls, params = list(urls_clean))
+      })
+      
+      # Summarize changes
+      stats_after <- self$url_info
+      removed_count <- stats_before$nr_todo - stats_after$nr_todo
+      
+      cli::cli_h3("taRantula URL Removal Summary")
+      cli::cli_dl(c(
+        "Targeted" = glue::glue("{length(urls_clean)} unique URLs requested"),
+        "Removed"  = glue::glue("{removed_count} pending URLs deleted")
+      ))
+      cli::cli_alert_info(glue::glue(
+        "Status: {stats_after$nr_todo} URLs pending | Total: {stats_after$nr_urls} entries in DB"
+      ))
+      
+      return(invisible(self))
+    },    
+    
+    #' @description
     #' Extract scraping results from the internal database.
     #'
     #' @param filter Optional character string with a SQL‑like `WHERE`

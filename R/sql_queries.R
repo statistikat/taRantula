@@ -119,6 +119,9 @@ sql_queries$status_update_failed  <- "UPDATE results SET status = 'failed_domain
 # --- URL MANAGEMENT ---
 sql_queries$tmp_urls_create <- "CREATE TEMPORARY TABLE tmp_urls (url TEXT)"
 
+# Delete specific pending URLs from the scrape queue
+sql_queries$delete_todo_urls <- "DELETE FROM results WHERE status = 'todo'  AND url = ?"
+
 # Synchronize results table forcing new state for todo URLs
 sql_queries$results_force_up <- "
   DELETE FROM results WHERE status = 'todo' AND url IN (SELECT url FROM tmp_urls);
