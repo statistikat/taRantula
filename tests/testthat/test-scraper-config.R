@@ -49,17 +49,29 @@ test_that("cfg_scraper R6 configuration and validation works", {
 test_that("cfg_googlesearch specific validation works", {
   env1 <- Sys.getenv("SCRAPING_APIKEY_GOOGLE")
   env2 <- Sys.getenv("SCRAPING_ENGINE_GOOGLE")
+  env3 <- Sys.getenv("SCRAPING_APIKEY_BRAVE")
   on.exit({
     Sys.setenv("SCRAPING_APIKEY_GOOGLE" = env1)
     Sys.setenv("SCRAPING_ENGINE_GOOGLE" = env2)
+    Sys.setenv("SCRAPING_APIKEY_BRAVE" = env3)
   })
 
   Sys.setenv("SCRAPING_APIKEY_GOOGLE" = "mygoogleAPIKey")
   Sys.setenv("SCRAPING_ENGINE_GOOGLE" = "mysearchEngineID")
+  Sys.setenv("SCRAPING_APIKEY_BRAVE" = "mybraveAPIKey")
 
   gcfg <- paramsGoogleSearch(path = tempdir())
 
   expect_equal(gcfg$get("max_queries"), 10000L)
+  expect_equal(gcfg$get("provider"), "google")
+  expect_equal(gcfg$get("credentials$key"), "mygoogleAPIKey")
+  expect_equal(gcfg$get("credentials$engine"), "mysearchEngineID")
+
+  bcfg <- paramsBraveSearch(path = tempdir())
+  expect_equal(bcfg$get("provider"), "brave")
+  expect_equal(bcfg$get("credentials$key"), "mybraveAPIKey")
+  expect_silent(bcfg_quiet <- paramsBraveSearch(path = tempdir(), verbose = FALSE))
+  expect_equal(bcfg_quiet$get("provider"), "brave")
 
   # Test enum-like validation for scrape_attributes
   expect_error(gcfg$set("scrape_attributes", "invalid_attr"))
@@ -68,6 +80,7 @@ test_that("cfg_googlesearch specific validation works", {
 
   # Test integer range
   expect_error(gcfg$set("max_query_rate", -5))
+  expect_error(gcfg$set("provider", "bing"))
 })
 
 test_that("YAML export and round-trip loading works", {

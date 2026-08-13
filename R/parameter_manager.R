@@ -198,14 +198,18 @@ params_manager <- R6::R6Class(
     load_config = function(config_file = NULL, ...) {
       default_config <- self$defaults()
       base_config <- default_config
+      init_overrides <- list(...)
+      show_messages <- !identical(init_overrides$verbose, FALSE)
 
       if (!is.null(config_file) && file.exists(config_file)) {
         tryCatch(
           expr = {
             file_config <- private$.yaml_read(config_file)
-            cli::cli_alert_info(
-              text = "Configuration loaded from '{config_file}' for {class(self)[1]}"
-            )
+            if (show_messages) {
+              cli::cli_alert_info(
+                text = "Configuration loaded from '{config_file}' for {class(self)[1]}"
+              )
+            }
             base_config <- utils::modifyList(base_config, file_config)
           },
           error = function(e) {
@@ -217,17 +221,20 @@ params_manager <- R6::R6Class(
           }
         )
       } else if (!is.null(config_file)) {
-        cli::cli_alert_info(
-          text = "Configuration file '{config_file}' not found for '{class(self)[1]}'. Using default configuration."
-        )
+        if (show_messages) {
+          cli::cli_alert_info(
+            text = "Configuration file '{config_file}' not found for '{class(self)[1]}'. Using default configuration."
+          )
+        }
       } else {
-        cli::cli_alert_info(
-          text = "No configuration file provided for '{class(self)[1]}'. Using default configuration."
-        )
+        if (show_messages) {
+          cli::cli_alert_info(
+            text = "No configuration file provided for '{class(self)[1]}'. Using default configuration."
+          )
+        }
       }
 
       # Overwrite with arguments passed to initialize()
-      init_overrides <- list(...)
       allowed_params <- names(base_config)
       class_name <- class(self)[1]
       for (key in names(init_overrides)) {
@@ -447,6 +454,7 @@ cfg_googlesearch <- R6::R6Class(
     #'     messages (default: `100`).
     #'   * `save_every_n`: Positive integer. Interval for saving intermediate
     #'     results (default: `500`).
+    #'   * `provider`: Search API provider. One of `"google"` or `"brave"`.
     #'   * `scrape_attributes`: Character vector. Specifies which data to extract
     #'     from results. One or more of: `"title"`, `"link"`, `"displayLink"`,
     #'     `"snippet"` (default: `c("link", "displayLink")`).
@@ -462,10 +470,12 @@ cfg_googlesearch <- R6::R6Class(
     #'   * `overwrite`: Logical. If `TRUE`, existing files are overwritten. If `FALSE`,
     #'     existing data are loaded via [data.table::fread()] and new results are
     #'     appended. Ensure column names match when appending (default: `FALSE`).
-    #'   * `credentials`: A named list containing Google API credentials. Use
-    #'     `"key"` or `"SCRAPING_APIKEY_GOOGLE"` for the API Key, and `"engine"`
-    #'     or `"SCRAPING_ENGINE_GOOGLE"` for the Search Engine ID. If omitted,
-    #'     environment variables are used. See also [getGoogleCreds()].
+    #'   * `credentials`: A named list containing search API credentials. For
+    #'     Google, use `"key"` or `"SCRAPING_APIKEY_GOOGLE"` for the API Key,
+    #'     and `"engine"` or `"SCRAPING_ENGINE_GOOGLE"` for the Search Engine ID.
+    #'     For Brave, use `"key"` or `"SCRAPING_APIKEY_BRAVE"` for the API Key.
+    #'     If omitted, environment variables are used. See also [getGoogleCreds()]
+    #'     and [getBraveCreds()].
     #'
     #' @param path Path to the directory where project data are stored.
     #'   Overrides the `path` setting in `config_file`.
@@ -475,17 +485,37 @@ cfg_googlesearch <- R6::R6Class(
     #' @return A configured object of class `cfg_googlesearch`.
     #' @export
     initialize = function(config_file = NULL, path = tempdir(), ...) {
-      .update_google_envvars <- function(creds) {
-        creds <- list(...)$credentials
+      .update_search_envvars <- function(creds, provider = "google") {
         if (is.null(creds) || length(creds) == 0) {
           return(invisible(NULL))
         }
+
+        provider <- tolower(provider)
+        if (!provider %in% c("google", "brave")) {
+          provider <- "google"
+        }
+
         mm <- c(
-          "KEY"                    = "SCRAPING_APIKEY_GOOGLE",
           "SCRAPING_APIKEY_GOOGLE" = "SCRAPING_APIKEY_GOOGLE",
-          "ENGINE"                 = "SCRAPING_ENGINE_GOOGLE",
-          "SCRAPING_ENGINE_GOOGLE" = "SCRAPING_ENGINE_GOOGLE"
+          "SCRAPING_ENGINE_GOOGLE" = "SCRAPING_ENGINE_GOOGLE",
+          "SCRAPING_APIKEY_BRAVE" = "SCRAPING_APIKEY_BRAVE"
         )
+        if (provider == "brave") {
+          mm <- c(
+            "KEY" = "SCRAPING_APIKEY_BRAVE",
+            "BRAVE_KEY" = "SCRAPING_APIKEY_BRAVE",
+            mm
+          )
+        } else {
+          mm <- c(
+            "KEY" = "SCRAPING_APIKEY_GOOGLE",
+            "GOOGLE_KEY" = "SCRAPING_APIKEY_GOOGLE",
+            "ENGINE" = "SCRAPING_ENGINE_GOOGLE",
+            "CX" = "SCRAPING_ENGINE_GOOGLE",
+            "GOOGLE_ENGINE" = "SCRAPING_ENGINE_GOOGLE",
+            mm
+          )
+        }
 
         nn <- toupper(names(creds))
 
@@ -505,11 +535,19 @@ cfg_googlesearch <- R6::R6Class(
         ))
         return(invisible(NULL))
       }
-      .update_google_envvars(creds = list(...)$credentials)
+      provider_arg <- list(...)$provider
+      if (is.null(provider_arg)) {
+        provider_arg <- "google"
+      }
+      .update_search_envvars(creds = list(...)$credentials, provider = provider_arg)
       super$initialize(config_file, ..., path = path)
+
+      provider <- self$get("provider")
+      credentials <- self$get("credentials")
+      self$set("credentials", getSearchCreds(provider = provider, credentials = credentials))
     },
     #' @description
-    #' Return the default configuration settings for Google Custom Search.
+    #' Return the default configuration settings for Search.
     #'
     #' @return A named list containing default values for:
     #' * `path` – directory to store output
@@ -517,16 +555,18 @@ cfg_googlesearch <- R6::R6Class(
     #' * `query_col` – column containing query strings
     #' * `print_every_n` – progress message interval
     #' * `save_every_n` – save interval
-    #' * `scrape_attributes` – which CSE fields to keep
+    #' * `provider` – search API provider
+    #' * `scrape_attributes` – which search result fields to keep
     #' * `verbose` – print progress messages
     #' * `max_queries` – maximum queries per 24h
     #' * `max_query_rate` – queries per 100 seconds
     #' * `file` – output file (or `NULL`)
     #' * `overwrite` – overwrite output file or append
-    #' * `credentials` – list with `key` and `engine`
+    #' * `credentials` – list with provider credentials
     defaults = function() {
       list(
         path = NULL,
+        provider = "google",
         id_col = "ID",
         query_col = NULL,
         print_every_n = 100,
@@ -537,7 +577,7 @@ cfg_googlesearch <- R6::R6Class(
         max_query_rate = 100,
         file = NULL,
         overwrite = FALSE,
-        credentials = getGoogleCreds()
+        credentials = list()
       )
     }
   ),
@@ -548,6 +588,12 @@ cfg_googlesearch <- R6::R6Class(
         super$.req_string(
           x = value,
           nm = key
+        )
+      } else if (key == "provider") {
+        super$.req_string(
+          x = value,
+          nm = key,
+          allowed = c("google", "brave")
         )
       } else if (key == "path") {
         super$.req_path(
@@ -578,6 +624,14 @@ cfg_googlesearch <- R6::R6Class(
           null_allowed = FALSE,
           allowed = c("title", "link", "displayLink", "snippet")
         )
+      } else if (key == "credentials") {
+        if (is.list(value) && length(value) == 0) {
+          return(invisible(TRUE))
+        }
+        super$.req_named_list(
+          x = value,
+          nm = key
+        )
       }
       return(invisible(TRUE))
     }
@@ -607,6 +661,7 @@ cfg_googlesearch <- R6::R6Class(
 #' # Create with overrides
 #' cfg <- paramsGoogleSearch(
 #'   path = getwd(),
+#'   provider = "google",
 #'   credentials = list(
 #'     key = "my_google_apikey",
 #'     engine = "my-search-engine-id"
@@ -636,6 +691,33 @@ cfg_googlesearch <- R6::R6Class(
 #' cfg$get("max_query_rate")
 paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
   cfg_googlesearch$new(config_file = config_file, path = path, ...)
+}
+
+#' Create a Brave Search configuration object
+#'
+#' This convenience wrapper creates a [cfg_googlesearch] object configured for
+#' the Brave Search API. It reads `SCRAPING_APIKEY_BRAVE` unless credentials are
+#' supplied explicitly.
+#'
+#' @param config_file Optional path to a YAML configuration file.
+#' @param path Path to a directory used for storing downloaded data.
+#'   Defaults to `tempdir()`.
+#' @param ... Additional named configuration overrides.
+#'
+#' @return A `cfg_googlesearch` object with `provider = "brave"`.
+#' @export
+#' @examples
+#' cfg <- paramsBraveSearch(
+#'   credentials = list(key = "my_brave_apikey"),
+#'   verbose = FALSE
+#' )
+paramsBraveSearch <- function(config_file = NULL, path = tempdir(), ...) {
+  cfg_googlesearch$new(
+    config_file = config_file,
+    path = path,
+    provider = "brave",
+    ...
+  )
 }
 
 #' @title Scraper Configuration Class
