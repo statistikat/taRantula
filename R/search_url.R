@@ -30,9 +30,7 @@
 #'
 #' @examples
 #' ## Example usage will be added in future versions
-searchURL <- function(cfg, dat,
-                      file = file,
-                      query_col = query_col) {
+searchURL <- function(cfg, dat, file = file, query_col = query_col) {
   position <- NULL
   creds <- cfg$get("credentials")
   stopifnot(inherits(cfg, "cfg_googlesearch"))
@@ -49,7 +47,9 @@ searchURL <- function(cfg, dat,
   scrape_attributes <- params$scrape_attributes
 
   if (is.null(query_col)) {
-    rlang::abort("Please use `cfg$update_setting('query_col' = '...')` to specify a variable holding queries")
+    rlang::abort(
+      "Please use `cfg$update_setting('query_col' = '...')` to specify a variable holding queries"
+    )
   }
 
   ##################
@@ -68,7 +68,9 @@ searchURL <- function(cfg, dat,
 
   searchQueries <- dat[[query_col]]
   if (!attributes(searchQueries)$query_attr == "built_encoded_query") {
-    rlang::abort(glue::glue("`{query_col}` was not constructed using buildQuery()"))
+    rlang::abort(glue::glue(
+      "`{query_col}` was not constructed using buildQuery()"
+    ))
   }
 
   ##################
@@ -99,7 +101,9 @@ searchURL <- function(cfg, dat,
       if (wait_time > 0) {
         wait_unit <- attr(wait_time, "units")
         if (verbose) {
-          rlang::inform(glue::glue("Waiting for {wait_time} {wait_unit} to prohibit sending more than {max_query_rate} queries per 100 seconds."))
+          rlang::inform(glue::glue(
+            "Waiting for {wait_time} {wait_unit} to prohibit sending more than {max_query_rate} queries per 100 seconds."
+          ))
         }
         wait_time <- as.numeric(wait_time, units = "secs")
         Sys.sleep(wait_time)
@@ -147,7 +151,9 @@ searchURL <- function(cfg, dat,
       wait_time <- (t + 60 * 60 * 24) - Sys.time()
       if (wait_time > 0) {
         wait_unit <- attr(wait_time, "units")
-        rlang::inform(glue::glue("\nReached maximum of {max_queries} requests per day; Waiting for {wait_time} {wait_unit}."))
+        rlang::inform(glue::glue(
+          "\nReached maximum of {max_queries} requests per day; Waiting for {wait_time} {wait_unit}."
+        ))
         Sys.sleep(as.numeric(wait_time, units = "secs"))
         t <- t_rate <- Sys.time()
         rlang::inform("Continuing")
@@ -184,10 +190,16 @@ query_google_search_api <- function(query, creds) {
 
   # if no results were found but google suggests another spelling of query
   # use the suggestion
-  if (QueryRes$searchInformation$totalResults == 0 && !is.null(QueryRes$spelling$correctedQuery)) {
+  if (
+    QueryRes$searchInformation$totalResults == 0 &&
+      !is.null(QueryRes$spelling$correctedQuery)
+  ) {
     corrquery <- QueryRes$spelling$correctedQuery
     corrquery <- urltools::url_encode(corrquery)
-    QueryRes <- read_json_wrapper(google_search_url(query = corrquery, creds = creds))
+    QueryRes <- read_json_wrapper(google_search_url(
+      query = corrquery,
+      creds = creds
+    ))
   }
 
   QueryRes
@@ -196,12 +208,15 @@ query_google_search_api <- function(query, creds) {
 google_search_url <- function(query, creds) {
   paste0(
     "https://www.googleapis.com/customsearch/v1?",
-    "key=", creds$key,
-    "&cx=", creds$engine,
+    "key=",
+    creds$key,
+    "&cx=",
+    creds$engine,
     "&gl=at", # country
     "&lr=lang_de", # language
     "&start=1", # start at position 1, start=11 results in links 11:20
-    "&q=", query
+    "&q=",
+    query
   )
 }
 
@@ -216,7 +231,8 @@ google_search_results <- function(QueryRes, scrape_attributes) {
 query_brave_search_api <- function(query, creds) {
   URLquery <- paste0(
     "https://api.search.brave.com/res/v1/web/search?",
-    "q=", query,
+    "q=",
+    urltools::url_encode(query),
     "&country=AT",
     "&search_lang=de",
     "&ui_lang=de-AT",
@@ -294,13 +310,18 @@ read_json_wrapper <- function(path, count = 1, headers = NULL) {
         jsonlite::read_json(path = path)
       } else {
         request <- httr2::request(path)
-        request <- do.call(httr2::req_headers, c(list(request), as.list(headers)))
+        request <- do.call(
+          httr2::req_headers,
+          c(list(request), as.list(headers))
+        )
         request <- httr2::req_error(request, is_error = function(resp) FALSE)
         response <- httr2::req_perform(request)
         status <- httr2::resp_status(response)
         content_text <- httr2::resp_body_string(response)
         if (status >= 400) {
-          rlang::abort(glue::glue("Search API request failed with HTTP {status}: {content_text}"))
+          rlang::abort(glue::glue(
+            "Search API request failed with HTTP {status}: {content_text}"
+          ))
         }
         jsonlite::fromJSON(content_text, simplifyVector = FALSE)
       }
@@ -313,7 +334,9 @@ read_json_wrapper <- function(path, count = 1, headers = NULL) {
     }
   )
 
-  call_failed <- is(output_json, "simpleWarning") | inherits(output_json, "error") | is(output_json, "try-error")
+  call_failed <- is(output_json, "simpleWarning") |
+    inherits(output_json, "error") |
+    is(output_json, "try-error")
   if (call_failed & count < 16) {
     Sys.sleep(count)
     output_json <- read_json_wrapper(path, count = count * 2, headers = headers)
@@ -410,8 +433,10 @@ runGoogleSearch <- function(cfg = cfg_googlesearch$new(), dat) {
     cfg$set(key = "file", save_files)
   } else {
     if (!rlang::is_character(save_files, n = length(queries))) {
-      rlang::abort("Files must be a character vector with the same length as queries,\n
-                   e.g length(cfg$get(key = 'file')) == length(cfg$get(key = 'query_col'))")
+      rlang::abort(
+        "Files must be a character vector with the same length as queries,\n
+                   e.g length(cfg$get(key = 'file')) == length(cfg$get(key = 'query_col'))"
+      )
     }
   }
 
@@ -493,7 +518,10 @@ getBraveCreds <- function(credentials = list()) {
   getSearchCreds(provider = "brave", credentials = credentials)
 }
 
-getSearchCreds <- function(provider = c("google", "brave"), credentials = list()) {
+getSearchCreds <- function(
+  provider = c("google", "brave"),
+  credentials = list()
+) {
   provider <- match.arg(provider)
   if (!is.list(credentials)) {
     rlang::abort("'credentials' must be a named list.")
@@ -512,10 +540,14 @@ getSearchCreds <- function(provider = c("google", "brave"), credentials = list()
     )
 
     if (is.na(key)) {
-      rlang::abort("No API-Key for Google found; Please set Environment Variable 'SCRAPING_APIKEY_GOOGLE'")
+      rlang::abort(
+        "No API-Key for Google found; Please set Environment Variable 'SCRAPING_APIKEY_GOOGLE'"
+      )
     }
     if (is.na(engine)) {
-      rlang::abort("No Search Engine ID for Google found; Please set Environment Variable 'SCRAPING_ENGINE_GOOGLE'")
+      rlang::abort(
+        "No Search Engine ID for Google found; Please set Environment Variable 'SCRAPING_ENGINE_GOOGLE'"
+      )
     }
 
     return(invisible(list(engine = engine, key = key)))
@@ -523,11 +555,18 @@ getSearchCreds <- function(provider = c("google", "brave"), credentials = list()
 
   key <- credential_value(
     credentials = credentials,
-    names = c("key", "brave_key", "SCRAPING_APIKEY_BRAVE", "x_subscription_token"),
+    names = c(
+      "key",
+      "brave_key",
+      "SCRAPING_APIKEY_BRAVE",
+      "x_subscription_token"
+    ),
     envname = "SCRAPING_APIKEY_BRAVE"
   )
   if (is.na(key)) {
-    rlang::abort("No API-Key for Brave found; Please set Environment Variable 'SCRAPING_APIKEY_BRAVE'")
+    rlang::abort(
+      "No API-Key for Brave found; Please set Environment Variable 'SCRAPING_APIKEY_BRAVE'"
+    )
   }
 
   invisible(list(key = key))
