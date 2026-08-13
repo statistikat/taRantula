@@ -251,7 +251,7 @@ cfg <- paramsGoogleSearch(
 # Return the current configuration
 cfg$show_config()
 #> $path
-#> [1] "/tmp/RtmpRhVd6b/file1b3019400c56/reference"
+#> [1] "/tmp/Rtmpn0ERZV/file1ab54fd6ec86/reference"
 #> 
 #> $id_col
 #> [1] "ID"
@@ -295,18 +295,18 @@ cfg$show_config()
 # Write current configuration to file
 f <- file.path(tempdir(), "config.yaml")
 cfg$export(f)
-#> ℹ Current configuration for 'cfg_googlesearch' written to '/tmp/RtmpRhVd6b/config.yaml'.
+#> ℹ Current configuration for 'cfg_googlesearch' written to '/tmp/Rtmpn0ERZV/config.yaml'.
 
 # Load from exported config-file and override
 cfg <- paramsGoogleSearch(config_file = f, verbose = TRUE)
-#> ℹ Configuration loaded from '/tmp/RtmpRhVd6b/config.yaml' for cfg_googlesearch
+#> ℹ Configuration loaded from '/tmp/Rtmpn0ERZV/config.yaml' for cfg_googlesearch
 try(file.remove(f))
 #> [1] TRUE
 
 # Return the current configuration
 cfg$show_config()
 #> $path
-#> [1] "/tmp/RtmpRhVd6b"
+#> [1] "/tmp/Rtmpn0ERZV"
 #> 
 #> $id_col
 #> [1] "ID"
