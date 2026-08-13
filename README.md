@@ -12,6 +12,7 @@
 * **Selenium Grid Support**: Configured for containerized Hub/Node architectures and high-memory environments.
 * **Fault Tolerance**: Includes a snapshotting mechanism to resume interrupted scraping jobs from the last saved state.
 * **Parallel Processing**: Distributes workloads across multiple workers using the `future` framework.
+* **Search API Integration**: Builds URL candidate lists with Google Custom Search or Brave Search.
 * **Regex Extraction**: Extracts emails, VAT/UID numbers, and custom text patterns directly from collected data.
 
 ## Configuration (`params_manager`)
@@ -20,6 +21,7 @@ The package uses an `R6`-based configuration system with strict type validation:
 
 * **`paramsScraper()`**: Configures general web crawling and browser rendering settings.
 * **`paramsGoogleSearch()`**: Configures Google Search queries and rate-limit handling.
+* **`paramsBraveSearch()`**: Configures Brave Search queries using `SCRAPING_APIKEY_BRAVE`.
 * **YAML Support**: Imports and exports configuration files for reproducible pipelines.
 
 ## Compliance and Safety
@@ -67,6 +69,27 @@ results <- scraper$results()
 
 # Shut down cleanly
 scraper$stop()
+```
+
+## Search URL Candidates
+
+```r
+library(taRantula)
+
+Sys.setenv(SCRAPING_APIKEY_BRAVE = "your_brave_search_key")
+
+cfg <- paramsBraveSearch()
+
+queries <- data.frame(
+  query = c("Statistik Austria", "R Project")
+)
+
+urls <- searchURL(
+  cfg = cfg,
+  dat = queries,
+  file = NULL,
+  query_col = "query"
+)
 ```
 
 ## Production Deployment
