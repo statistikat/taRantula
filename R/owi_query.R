@@ -33,6 +33,8 @@
 #' runOwiSliceQuery(dry_run = TRUE)
 runOwiSliceQuery <- function(
   route = "all:latest/collectionName=legal",
+  # longer running examples
+  # route = "all:2026-01-01..2026-08-13/collectionName=legal",
   url_suffix = "at",
   where = NULL,
   select = c(
@@ -163,20 +165,32 @@ buildOwiSystemEnv <- function(path_prepend) {
   paste0("PATH=", path_prepend, ":", Sys.getenv("PATH"))
 }
 
-findLatestOwiParquetPath <- function(collection, local_base_path, modified_after = NULL) {
+findLatestOwiParquetPath <- function(
+  collection,
+  local_base_path,
+  modified_after = NULL
+) {
   collection_path <- file.path(local_base_path, collection)
   if (!dir.exists(collection_path)) {
     return(NA_character_)
   }
 
-  dataset_dirs <- list.dirs(collection_path, full.names = TRUE, recursive = FALSE)
+  dataset_dirs <- list.dirs(
+    collection_path,
+    full.names = TRUE,
+    recursive = FALSE
+  )
   if (length(dataset_dirs) == 0) {
     return(NA_character_)
   }
 
-  has_parquet <- vapply(dataset_dirs, function(path) {
-    length(list.files(path, pattern = "\\.parquet$", full.names = TRUE)) > 0
-  }, logical(1))
+  has_parquet <- vapply(
+    dataset_dirs,
+    function(path) {
+      length(list.files(path, pattern = "\\.parquet$", full.names = TRUE)) > 0
+    },
+    logical(1)
+  )
   dataset_dirs <- dataset_dirs[has_parquet]
   if (length(dataset_dirs) == 0) {
     return(NA_character_)
@@ -225,6 +239,8 @@ assert_null_or_positive_integerish <- function(x, nm) {
     return(invisible(TRUE))
   }
   if (!rlang::is_scalar_integerish(x) || x < 0) {
-    rlang::abort(glue::glue("`{nm}` must be a non-negative integerish scalar or NULL."))
+    rlang::abort(glue::glue(
+      "`{nm}` must be a non-negative integerish scalar or NULL."
+    ))
   }
 }
