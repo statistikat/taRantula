@@ -255,11 +255,11 @@ cfg <- paramsScraper(base_dir = tempdir(), project = "my-project")
 # Write current configuration to file
 f <- tempfile(fileext = ".yaml")
 cfg$export(f)
-#> ℹ Current configuration for 'cfg_scraper' written to '/tmp/Rtmplb015P/file1bfa71407dbf.yaml'.
+#> ℹ Current configuration for 'cfg_scraper' written to '/tmp/RtmpRhVd6b/file1b304331b321.yaml'.
 
 # Load from exported config-file and override
 cfg <- paramsScraper(config_file = f, project = "some-other-proj")
-#> ℹ Configuration loaded from '/tmp/Rtmplb015P/file1bfa71407dbf.yaml' for cfg_scraper
+#> ℹ Configuration loaded from '/tmp/RtmpRhVd6b/file1b304331b321.yaml' for cfg_scraper
 try(file.remove(f))
 #> [1] TRUE
 
@@ -269,7 +269,7 @@ cfg$show_config()
 #> [1] "some-other-proj"
 #> 
 #> $base_dir
-#> [1] "/tmp/Rtmplb015P/file1bfa20e2edc9/reference"
+#> [1] "/tmp/RtmpRhVd6b/file1b3019400c56/reference"
 #> 
 #> $urls
 #> list()
