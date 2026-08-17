@@ -240,11 +240,11 @@ of these values via YAML or programmatic arguments.</p><div class="section">
 <span class="r-in"><span><span class="co"># Write current configuration to file</span></span></span>
 <span class="r-in"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".yaml"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span><span class="op">$</span><span class="fu">export</span><span class="op">(</span><span class="va">f</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Current configuration for 'cfg_scraper' written to '/tmp/RtmpJc4SBm/file1a4d22d37bda.yaml'.</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Current configuration for 'cfg_scraper' written to '/tmp/Rtmp3WutTr/file1af33016ba7d.yaml'.</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Load from exported config-file and override</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span> <span class="op">&lt;-</span> <span class="fu">paramsScraper</span><span class="op">(</span>config_file <span class="op">=</span> <span class="va">f</span>, project <span class="op">=</span> <span class="st">"some-other-proj"</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Configuration loaded from '/tmp/RtmpJc4SBm/file1a4d22d37bda.yaml' for cfg_scraper</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Configuration loaded from '/tmp/Rtmp3WutTr/file1af33016ba7d.yaml' for cfg_scraper</span>
 <span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.remove</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
 <span class="r-in"><span></span></span>
@@ -254,7 +254,7 @@ of these values via YAML or programmatic arguments.</p><div class="section">
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "some-other-proj"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $base_dir</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/RtmpJc4SBm/file1a4d1e7dd9e5/reference"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/Rtmp3WutTr/file1af351a62c6d/reference"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $urls</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> list()</span>
