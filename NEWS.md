@@ -4,6 +4,7 @@
 * **Storage Refactoring**: Moved raw scraping data (source code and link metadata) from the database into `parquet` files under `{project_dir}/data`.
 * **Brave Search Support**: `searchURL()` now supports the Brave Search API via `paramsBraveSearch()` and `SCRAPING_APIKEY_BRAVE`, returning Google-compatible result columns for downstream workflows.
 * **Brave Search URL Blacklists**: `paramsBraveSearch()` now accepts `blacklisted_urls`, writes them to a temporary `.goggle` file, and sends the generated Goggles rules to Brave Search.
+* **OWI Search Interface**: OWI searches the downloaded Parquet files using DuckDB.
 * **Database Schema Changes**:
     * Added a `urls` table to store all target URLs.
     * Modified the `results` table to replace raw source code storage with a `file_path` reference to the `parquet` files.
@@ -37,7 +38,7 @@
 * **R6-based Config System**: Introduced a robust, hierarchical configuration system with strict validation logic.
     * `paramsScraper()`: Dedicated configuration for generic web crawling and JS rendering.
     * `paramsGoogleSearch()`: Tailored configuration for Google Search API interactions including rate-limit management.
-* **Deep Merging**: Configuration methods now support nested path updates (e.g., `cfg$set("selenium$host", ...)`). 
+* **Deep Merging**: Configuration methods now support nested path updates (e.g., `cfg$set("selenium$host", ...)`).
 * **Validation**: Built-in defensive programming with type-checking for integers, booleans, character vectors, and directory paths.
 * **Export/Import functionality**: Added `$export()` and `$write_defaults()` methods to support YAML-based configuration round-trips.
 

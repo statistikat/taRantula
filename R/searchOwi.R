@@ -1,8 +1,9 @@
-#' Search keyword occurrences in OWI parquet output
+#' Search keyword occurrences in OWI output
 #'
 #' @description
 #' Searches OWI parquet files and returns rows where `keyword` occurs in a
-#' selected text field. The default field is `main_content`.
+#' selected text field. The default field is `main_content`. Parquet files are
+#' queried directly with DuckDB.
 #'
 #' @param parquet_path Character scalar path, glob, or directory containing
 #'   parquet files, such as the `parquet_path` returned by [runOwiSliceQuery()].
@@ -14,9 +15,6 @@
 #' @param fixed Logical scalar. If `TRUE`, treat `keyword` as literal text.
 #'   Otherwise `keyword` is interpreted as a regular expression.
 #' @param limit Optional integerish scalar limiting the number of returned rows.
-#' @param backend Character scalar. `"duckdb"` queries parquet files directly
-#'   with DuckDB and is usually faster for larger datasets. `"arrow"` keeps the
-#'   previous R-side filtering implementation.
 #' @param as_data_table Logical scalar. If `TRUE`, return a `data.table`;
 #'   otherwise return a `data.frame`.
 #'
@@ -25,8 +23,8 @@
 #' @export
 #'
 #' @examples
-#' # searchOwiParquet("/path/to/*.parquet", keyword = "Impressum")
-searchOwiParquet <- function(
+#' # searchOwi("/path/to/*.parquet", keyword = "Impressum")
+searchOwi <- function(
   parquet_path,
   keyword,
   field = "main_content",
@@ -34,7 +32,6 @@ searchOwiParquet <- function(
   ignore_case = TRUE,
   fixed = TRUE,
   limit = NULL,
-  backend = c("duckdb", "arrow"),
   as_data_table = TRUE
 ) {
   assert_scalar_character(parquet_path, "parquet_path")
@@ -44,7 +41,6 @@ searchOwiParquet <- function(
   assert_scalar_logical(ignore_case, "ignore_case")
   assert_scalar_logical(fixed, "fixed")
   assert_null_or_positive_integerish(limit, "limit")
-  backend <- match.arg(backend)
   assert_scalar_logical(as_data_table, "as_data_table")
 
   files <- resolveParquetFiles(parquet_path)
@@ -60,25 +56,8 @@ searchOwiParquet <- function(
   }
   columns <- intersect(columns, names(schema))
 
-  if (identical(backend, "duckdb")) {
-    dat <- searchOwiParquetDuckdb(
-      parquet_path = parquet_path,
-      files = files,
-      keyword = keyword,
-      field = field,
-      select = select,
-      columns = columns,
-      ignore_case = ignore_case,
-      fixed = fixed,
-      limit = limit
-    )
-    if (as_data_table) {
-      return(data.table::as.data.table(dat))
-    }
-    return(as.data.frame(dat))
-  }
-
-  searchOwiParquetArrow(
+  dat <- searchOwiDuckdb(
+    parquet_path = parquet_path,
     files = files,
     keyword = keyword,
     field = field,
@@ -86,61 +65,15 @@ searchOwiParquet <- function(
     columns = columns,
     ignore_case = ignore_case,
     fixed = fixed,
-    limit = limit,
-    as_data_table = as_data_table
+    limit = limit
   )
-}
-
-searchOwiParquetArrow <- function(
-  files,
-  keyword,
-  field,
-  select,
-  columns,
-  ignore_case,
-  fixed,
-  limit,
-  as_data_table
-) {
-  dat <- lapply(files, function(file) {
-    file_dat <- arrow::read_parquet(
-      file = file,
-      as_data_frame = TRUE
-    )
-    file_dat[, intersect(columns, names(file_dat)), drop = FALSE]
-  })
-  dat <- data.table::rbindlist(dat, use.names = TRUE, fill = TRUE)
-
-  field_values <- dat[[field]]
-  pattern <- keyword
-  if (fixed && ignore_case) {
-    field_values <- tolower(field_values)
-    pattern <- tolower(pattern)
-    ignore_case <- FALSE
-  }
-  matches <- grepl(
-    pattern = pattern,
-    x = field_values,
-    ignore.case = ignore_case,
-    fixed = fixed
-  )
-  matches[is.na(matches)] <- FALSE
-  dat <- dat[matches, , drop = FALSE]
-
-  return_columns <- intersect(unique(select), names(dat))
-  dat <- dat[, ..return_columns]
-
-  if (!is.null(limit)) {
-    dat <- utils::head(dat, limit)
-  }
   if (as_data_table) {
-    data.table::as.data.table(dat)
-  } else {
-    as.data.frame(dat)
+    return(data.table::as.data.table(dat))
   }
+  as.data.frame(dat)
 }
 
-searchOwiParquetDuckdb <- function(
+searchOwiDuckdb <- function(
   parquet_path,
   files,
   keyword,

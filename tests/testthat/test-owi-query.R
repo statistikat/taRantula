@@ -141,7 +141,7 @@ test_that("runOwiSliceQuery validates inputs", {
   expect_error(runOwiSliceQuery(local_base_path = "", dry_run = TRUE), "`local_base_path`")
 })
 
-test_that("searchOwiParquet searches main_content by default", {
+test_that("searchOwi searches main_content by default", {
   parquet_dir <- tempfile("owi-parquet-")
   dir.create(parquet_dir)
   arrow::write_parquet(
@@ -158,7 +158,7 @@ test_that("searchOwiParquet searches main_content by default", {
     file.path(parquet_dir, "part-1.parquet")
   )
 
-  result <- searchOwiParquet(
+  result <- searchOwi(
     parquet_path = file.path(parquet_dir, "*.parquet"),
     keyword = "firmenbuchnummer"
   )
@@ -169,7 +169,7 @@ test_that("searchOwiParquet searches main_content by default", {
   expect_true("main_content" %in% names(result))
 })
 
-test_that("searchOwiParquet supports a custom search field and limit", {
+test_that("searchOwi supports a custom search field and limit", {
   parquet_dir <- tempfile("owi-parquet-")
   dir.create(parquet_dir)
   arrow::write_parquet(
@@ -182,7 +182,7 @@ test_that("searchOwiParquet supports a custom search field and limit", {
     file.path(parquet_dir, "part-1.parquet")
   )
 
-  result <- searchOwiParquet(
+  result <- searchOwi(
     parquet_path = parquet_dir,
     keyword = "Privacy",
     field = "title",
@@ -197,7 +197,7 @@ test_that("searchOwiParquet supports a custom search field and limit", {
   expect_equal(result$url, "https://b.at/privacy")
 })
 
-test_that("searchOwiParquet keeps the Arrow backend available", {
+test_that("searchOwi only uses the DuckDB backend", {
   parquet_dir <- tempfile("owi-parquet-")
   dir.create(parquet_dir)
   arrow::write_parquet(
@@ -210,10 +210,9 @@ test_that("searchOwiParquet keeps the Arrow backend available", {
     file.path(parquet_dir, "part-1.parquet")
   )
 
-  result <- searchOwiParquet(
+  result <- searchOwi(
     parquet_path = parquet_dir,
-    keyword = "LEGAL",
-    backend = "arrow"
+    keyword = "LEGAL"
   )
 
   expect_s3_class(result, "data.table")
@@ -221,8 +220,9 @@ test_that("searchOwiParquet keeps the Arrow backend available", {
   expect_equal(result$url, "https://a.at/impressum")
 })
 
-test_that("searchOwiParquet validates inputs and missing files", {
-  expect_error(searchOwiParquet("", keyword = "x"), "`parquet_path`")
-  expect_error(searchOwiParquet(tempfile(), keyword = "x"), "No parquet files")
-  expect_error(searchOwiParquet(tempfile(fileext = ".parquet"), keyword = ""), "`keyword`")
+test_that("searchOwi validates inputs and missing files", {
+  expect_error(searchOwi("", keyword = "x"), "`parquet_path`")
+  expect_error(searchOwi(tempfile(), keyword = "x"), "No parquet files")
+  expect_error(searchOwi(tempfile(fileext = ".parquet"), keyword = ""), "`keyword`")
+  expect_error(searchOwi(tempfile(), keyword = "x", backend = "arrow"), "unused argument")
 })

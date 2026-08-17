@@ -29,6 +29,7 @@ reference:
       - buildQuery
       - runGoogleSearch
       - searchURL
+      - searchOwi
       - getGoogleCreds
       - getBraveCreds
 
