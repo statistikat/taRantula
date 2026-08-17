@@ -253,7 +253,7 @@ These take precedence over both <code>config_file</code> and default values.</p>
 <span class="r-in"><span><span class="co"># Return the current configuration</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span><span class="op">$</span><span class="fu">show_config</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $path</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/Rtmp3YgKhf/file1acc7e04814f/reference"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/RtmpJc4SBm/file1a4d1e7dd9e5/reference"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $id_col</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "ID"</span>
@@ -297,18 +297,18 @@ These take precedence over both <code>config_file</code> and default values.</p>
 <span class="r-in"><span><span class="co"># Write current configuration to file</span></span></span>
 <span class="r-in"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"config.yaml"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span><span class="op">$</span><span class="fu">export</span><span class="op">(</span><span class="va">f</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Current configuration for 'cfg_googlesearch' written to '/tmp/Rtmp3YgKhf/config.yaml'.</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Current configuration for 'cfg_googlesearch' written to '/tmp/RtmpJc4SBm/config.yaml'.</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Load from exported config-file and override</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span> <span class="op">&lt;-</span> <span class="fu">paramsGoogleSearch</span><span class="op">(</span>config_file <span class="op">=</span> <span class="va">f</span>, verbose <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Configuration loaded from '/tmp/Rtmp3YgKhf/config.yaml' for cfg_googlesearch</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">ℹ</span> Configuration loaded from '/tmp/RtmpJc4SBm/config.yaml' for cfg_googlesearch</span>
 <span class="r-in"><span><span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.remove</a></span><span class="op">(</span><span class="va">f</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Return the current configuration</span></span></span>
 <span class="r-in"><span><span class="va">cfg</span><span class="op">$</span><span class="fu">show_config</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $path</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/Rtmp3YgKhf"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "/tmp/RtmpJc4SBm"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $id_col</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "ID"</span>
