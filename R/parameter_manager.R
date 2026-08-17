@@ -406,16 +406,16 @@ params_manager <- R6::R6Class(
   )
 )
 
-#' @title Google Search Configuration Class
+#' @title Search API Configuration Class
 #'
 #' @description
 #' `cfg_googlesearch` is an R6 class that inherits from
 #' [`params_manager`] and provides configuration management for
-#' performing Google Custom Search API queries.
+#' performing Google Custom Search API and Brave Search API queries.
 #'
 #' It handles:
 #'
-#' * Definition of default parameters for Google search jobs
+#' * Definition of default parameters for search jobs
 #' * YAML-based configuration overrides
 #' * Programmatic overrides via `...`
 #' * Validation of all relevant configuration fields
@@ -458,6 +458,9 @@ cfg_googlesearch <- R6::R6Class(
     #'   * `scrape_attributes`: Character vector. Specifies which data to extract
     #'     from results. One or more of: `"title"`, `"link"`, `"displayLink"`,
     #'     `"snippet"` (default: `c("link", "displayLink")`).
+    #'   * `blacklisted_urls`: Character vector of domains or URLs to discard
+    #'     from Brave Search results using a temporary Goggles file. Ignored by
+    #'     Google Search (default: `NULL`).
     #'   * `verbose`: Logical. Should progress updates be printed to the
     #'     console? (default: `TRUE`).
     #'   * `max_queries`: Maximum queries allowed per 24-hour period. If reached,
@@ -563,6 +566,7 @@ cfg_googlesearch <- R6::R6Class(
     #' * `file` – output file (or `NULL`)
     #' * `overwrite` – overwrite output file or append
     #' * `credentials` – list with provider credentials
+    #' * `blacklisted_urls` – domains or URLs to discard for Brave Search
     defaults = function() {
       list(
         path = NULL,
@@ -577,7 +581,8 @@ cfg_googlesearch <- R6::R6Class(
         max_query_rate = 100,
         file = NULL,
         overwrite = FALSE,
-        credentials = list()
+        credentials = list(),
+        blacklisted_urls = NULL
       )
     }
   ),
@@ -611,7 +616,7 @@ cfg_googlesearch <- R6::R6Class(
           nm = key,
           min_val = 0
         )
-      } else if (key %in% c("file", "query_col")) {
+      } else if (key %in% c("file", "query_col", "blacklisted_urls")) {
         super$.req_charv(
           x = value,
           nm = key,
@@ -703,12 +708,16 @@ paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
 #' @param path Path to a directory used for storing downloaded data.
 #'   Defaults to `tempdir()`.
 #' @param ... Additional named configuration overrides.
+#'   For Brave Search, `blacklisted_urls` can be supplied as a character vector
+#'   of domains or URLs. These are written to a temporary `.goggle` file and sent
+#'   to the Brave API as an inline Goggle definition.
 #'
 #' @return A `cfg_googlesearch` object with `provider = "brave"`.
 #' @export
 #' @examples
 #' cfg <- paramsBraveSearch(
 #'   credentials = list(key = "my_brave_apikey"),
+#'   blacklisted_urls = c("example.com", "https://spam.test/page"),
 #'   verbose = FALSE
 #' )
 paramsBraveSearch <- function(config_file = NULL, path = tempdir(), ...) {

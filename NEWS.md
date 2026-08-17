@@ -3,6 +3,7 @@
 ### Main Features
 * **Storage Refactoring**: Moved raw scraping data (source code and link metadata) from the database into `parquet` files under `{project_dir}/data`.
 * **Brave Search Support**: `searchURL()` now supports the Brave Search API via `paramsBraveSearch()` and `SCRAPING_APIKEY_BRAVE`, returning Google-compatible result columns for downstream workflows.
+* **Brave Search URL Blacklists**: `paramsBraveSearch()` now accepts `blacklisted_urls`, writes them to a temporary `.goggle` file, and sends the generated Goggles rules to Brave Search.
 * **Database Schema Changes**:
     * Added a `urls` table to store all target URLs.
     * Modified the `results` table to replace raw source code storage with a `file_path` reference to the `parquet` files.
