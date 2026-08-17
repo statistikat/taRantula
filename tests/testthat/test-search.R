@@ -87,3 +87,33 @@ test_that("Brave search returns business URL candidates with Google-compatible c
 
   expect_search_output(result)
 })
+
+test_that("Brave URL blacklists are converted to Goggles requests", {
+  goggle_file <- write_brave_blacklist_goggle(
+    c(
+      "https://www.example.com/path",
+      "spam.test",
+      "example.com/duplicate"
+    ),
+    path = tempdir()
+  )
+
+  expect_true(file.exists(goggle_file))
+  expect_equal(tools::file_ext(goggle_file), "goggle")
+
+  goggle_lines <- readLines(goggle_file, warn = FALSE)
+  expect_true("! name: URL Blacklist" %in% goggle_lines)
+  expect_true("$discard,site=example.com" %in% goggle_lines)
+  expect_true("$discard,site=spam.test" %in% goggle_lines)
+  expect_equal(sum(goggle_lines == "$discard,site=example.com"), 1L)
+
+  goggles <- read_brave_goggle_file(goggle_file)
+  params <- brave_search_params("Acme%20GmbH", goggles = goggles)
+  expect_equal(params$q, "Acme GmbH")
+  expect_equal(params$goggles, goggles)
+
+  url <- brave_search_url(brave_search_params("Acme%20GmbH"))
+  expect_true(grepl("q=Acme%20GmbH", url, fixed = TRUE))
+  expect_false(grepl("%2520", url, fixed = TRUE))
+  expect_false(grepl("goggles=", url, fixed = TRUE))
+})

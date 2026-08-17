@@ -77,24 +77,26 @@ networks:
 
 The package contains the following processes: 
     
-- define google custom search parameters via an `R6`-based configuration and run a google custom search.
+- define search parameters via an `R6`-based configuration and run Google Custom Search or Brave Search.
 - define scraping parameters via an `R6`-based configuration and initializing the scraper.
     
 
-## Google custom search    
+## Search URL Candidates
 
 ### Configuration 
 
-Set the following environmental variables:
+For Google Custom Search, set the following environmental variables:
 
   - `SCRAPING_APIKEY_GOOGLE` for the google custom search api key
   - `SCRAPING_ENGINE_GOOGLE` for the google custom search engine ID
 
-Use `paramsGoogleSearch()` to manage settings. This ensures all nested parameters are validated before the google custom search starts.
+For Brave Search, set `SCRAPING_APIKEY_BRAVE` for the Brave Search API key.
 
-### Custom search
+Use `paramsGoogleSearch()` or `paramsBraveSearch()` to manage settings. This ensures all nested parameters are validated before the search starts.
 
-Run google custom search api with a queries build from enterprise name and addresses.
+### Google Custom Search
+
+Run Google Custom Search API with queries built from enterprise name and addresses.
 
 ```{r}
 Sys.setenv(
@@ -127,7 +129,36 @@ cfg$set(key = "file", c("File1.csv", "File2.csv")) # <- files to save results in
 # run google custom search
 runGoogleSearch(
   cfg = cfg,
-  data = data
+  dat = dat
+)
+```
+
+### Brave Search with a URL blacklist
+
+Brave Search supports URL blacklists through the `blacklisted_urls` setting. The domains or URLs are written to a temporary `.goggle` file and sent to the Brave Search API as Goggles rules.
+
+```{r}
+Sys.setenv(SCRAPING_APIKEY_BRAVE = "My_Brave_ApiKey")
+
+dat <- data.table(
+  id = 1,
+  term = "st-georgen-kreischberg"
+)
+dat[, query := buildQuery(.SD), .SDcols = "term"]
+
+cfg <- paramsBraveSearch(
+  id_col = "id",
+  query_col = "query",
+  blacklisted_urls = "https://www.st-georgen-kreischberg.gv.at/",
+  scrape_attributes = c("title", "link", "displayLink", "snippet"),
+  verbose = FALSE
+)
+
+urls <- searchURL(
+  cfg = cfg,
+  dat = dat,
+  file = NULL,
+  query_col = "query"
 )
 ```
 

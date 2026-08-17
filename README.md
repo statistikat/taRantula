@@ -21,7 +21,7 @@ The package uses an `R6`-based configuration system with strict type validation:
 
 * **`paramsScraper()`**: Configures general web crawling and browser rendering settings.
 * **`paramsGoogleSearch()`**: Configures Google Search queries and rate-limit handling.
-* **`paramsBraveSearch()`**: Configures Brave Search queries using `SCRAPING_APIKEY_BRAVE`.
+* **`paramsBraveSearch()`**: Configures Brave Search queries using `SCRAPING_APIKEY_BRAVE`, with optional URL blacklists via Brave Goggles.
 * **YAML Support**: Imports and exports configuration files for reproducible pipelines.
 
 ## Compliance and Safety
@@ -78,10 +78,18 @@ library(taRantula)
 
 Sys.setenv(SCRAPING_APIKEY_BRAVE = "your_brave_search_key")
 
-cfg <- paramsBraveSearch()
-
 queries <- data.frame(
-  query = c("Statistik Austria", "R Project")
+  id = 1,
+  term = "st-georgen-kreischberg"
+)
+queries$query <- buildQuery(queries, selectCols = "term")
+
+cfg <- paramsBraveSearch(
+  id_col = "id",
+  query_col = "query",
+  blacklisted_urls = "https://www.st-georgen-kreischberg.gv.at/",
+  scrape_attributes = c("title", "link", "displayLink", "snippet"),
+  verbose = FALSE
 )
 
 urls <- searchURL(

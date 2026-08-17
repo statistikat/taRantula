@@ -29,7 +29,30 @@
 #' @export
 #'
 #' @examples
-#' ## Example usage will be added in future versions
+#' \dontrun{
+#' Sys.setenv(SCRAPING_APIKEY_BRAVE = "your_brave_search_key")
+#'
+#' dat <- data.frame(
+#'   id = 1,
+#'   term = "st-georgen-kreischberg"
+#' )
+#' dat$query <- buildQuery(dat, selectCols = "term")
+#'
+#' cfg <- paramsBraveSearch(
+#'   id_col = "id",
+#'   query_col = "query",
+#'   blacklisted_urls = "https://www.st-georgen-kreischberg.gv.at/",
+#'   scrape_attributes = c("title", "link", "displayLink", "snippet"),
+#'   verbose = FALSE
+#' )
+#'
+#' urls <- searchURL(
+#'   cfg = cfg,
+#'   dat = dat,
+#'   file = NULL,
+#'   query_col = "query"
+#' )
+#' }
 searchURL <- function(cfg, dat, file = file, query_col = query_col) {
   position <- NULL
   creds <- cfg$get("credentials")
@@ -45,6 +68,7 @@ searchURL <- function(cfg, dat, file = file, query_col = query_col) {
   max_query_rate <- params$max_query_rate
   overwrite <- params$overwrite
   scrape_attributes <- params$scrape_attributes
+  blacklisted_urls <- params$blacklisted_urls
 
   if (is.null(query_col)) {
     rlang::abort(
@@ -93,6 +117,14 @@ searchURL <- function(cfg, dat, file = file, query_col = query_col) {
   }
 
   t <- t_rate <- Sys.time()
+  brave_goggles_file <- NULL
+  brave_goggles <- NULL
+  if (provider == "brave") {
+    brave_goggles_file <- write_brave_blacklist_goggle(blacklisted_urls)
+    if (!is.null(brave_goggles_file)) {
+      brave_goggles <- read_brave_goggle_file(brave_goggles_file)
+    }
+  }
   for (q in 1:nrow(dat)) {
     if (q %% (max_query_rate - 1) == 0) {
       # check if waiting time was uphold
@@ -119,7 +151,11 @@ searchURL <- function(cfg, dat, file = file, query_col = query_col) {
         scrape_attributes = scrape_attributes
       )
     } else if (provider == "brave") {
-      QueryRes <- query_brave_search_api(query = query, creds = creds)
+      QueryRes <- query_brave_search_api(
+        query = query,
+        creds = creds,
+        goggles = brave_goggles
+      )
       urls <- brave_search_results(
         QueryRes = QueryRes,
         scrape_attributes = scrape_attributes
@@ -228,28 +264,124 @@ google_search_results <- function(QueryRes, scrape_attributes) {
   rbindlist(urls, use.names = TRUE, fill = TRUE)
 }
 
-query_brave_search_api <- function(query, creds) {
-  URLquery <- paste0(
-    "https://api.search.brave.com/res/v1/web/search?",
-    "q=",
-    urltools::url_encode(query),
-    "&country=AT",
-    "&search_lang=de",
-    "&ui_lang=de-AT",
-    "&count=10",
-    "&offset=0",
-    "&result_filter=web",
-    "&text_decorations=false"
+query_brave_search_api <- function(query, creds, goggles = NULL) {
+  params <- brave_search_params(query = query, goggles = goggles)
+  headers <- c(
+    "Accept" = "application/json",
+    "Accept-Encoding" = "gzip",
+    "X-Subscription-Token" = creds$key
   )
 
+  if (!is.null(goggles)) {
+    return(read_json_wrapper(
+      "https://api.search.brave.com/res/v1/web/search",
+      headers = headers,
+      method = "POST",
+      body = params
+    ))
+  }
+
   read_json_wrapper(
-    URLquery,
+    brave_search_url(params),
     headers = c(
-      "Accept" = "application/json",
-      "Accept-Encoding" = "gzip",
-      "X-Subscription-Token" = creds$key
+      headers
     )
   )
+}
+
+brave_search_params <- function(query, goggles = NULL) {
+  params <- list(
+    q = brave_query_value(query),
+    country = "AT",
+    search_lang = "de",
+    ui_lang = "de-AT",
+    count = 10,
+    offset = 0,
+    result_filter = "web",
+    text_decorations = FALSE
+  )
+  if (!is.null(goggles)) {
+    params$goggles <- goggles
+  }
+  params
+}
+
+brave_search_url <- function(params) {
+  query <- paste(
+    paste0(
+      names(params),
+      "=",
+      vapply(params, url_query_value, character(1))
+    ),
+    collapse = "&"
+  )
+  paste0("https://api.search.brave.com/res/v1/web/search?", query)
+}
+
+brave_query_value <- function(query) {
+  urltools::url_decode(as.character(query))
+}
+
+url_query_value <- function(value) {
+  if (is.logical(value)) {
+    value <- tolower(as.character(value))
+  }
+  utils::URLencode(as.character(value), reserved = TRUE)
+}
+
+write_brave_blacklist_goggle <- function(blacklisted_urls, path = tempdir()) {
+  blacklisted_urls <- normalize_brave_blacklist(blacklisted_urls)
+  if (is.null(blacklisted_urls)) {
+    return(NULL)
+  }
+
+  goggle_file <- tempfile(
+    pattern = "brave-url-blacklist-",
+    tmpdir = path,
+    fileext = ".goggle"
+  )
+  writeLines(
+    c(
+      "! name: URL Blacklist",
+      "! description: Excludes domains from the supplied URL blacklist",
+      "! public: false",
+      "! author: taRantula",
+      "",
+      paste0("$discard,site=", blacklisted_urls)
+    ),
+    con = goggle_file,
+    useBytes = TRUE
+  )
+  goggle_file
+}
+
+normalize_brave_blacklist <- function(blacklisted_urls) {
+  if (is.null(blacklisted_urls)) {
+    return(NULL)
+  }
+
+  blacklisted_urls <- trimws(as.character(blacklisted_urls))
+  blacklisted_urls <- blacklisted_urls[!is.na(blacklisted_urls) & nzchar(blacklisted_urls)]
+  if (length(blacklisted_urls) == 0) {
+    return(NULL)
+  }
+
+  domains <- vapply(blacklisted_urls, function(x) {
+    host <- tryCatch(
+      urltools::domain(x),
+      error = function(e) NA_character_
+    )
+    if (is.na(host) || !nzchar(host)) {
+      return(x)
+    }
+    sub("^www\\.", "", host)
+  }, character(1), USE.NAMES = FALSE)
+
+  unique(domains)
+}
+
+read_brave_goggle_file <- function(path) {
+  paste(readLines(path, warn = FALSE), collapse = "\n")
 }
 
 brave_search_results <- function(QueryRes, scrape_attributes) {
@@ -298,12 +430,20 @@ display_link_from_url <- function(url) {
 #' @param path URL from which JSON should be read.
 #' @param count Integer specifying the current retry interval. Used internally.
 #' @param headers Optional named character vector of HTTP headers.
+#' @param method HTTP method to use when headers are supplied.
+#' @param body Optional request body for JSON POST requests.
 #'
 #' @return
 #' Parsed JSON content or an error/warning object when all retries fail.
 #'
 #' @keywords internal
-read_json_wrapper <- function(path, count = 1, headers = NULL) {
+read_json_wrapper <- function(
+  path,
+  count = 1,
+  headers = NULL,
+  method = "GET",
+  body = NULL
+) {
   output_json <- tryCatch(
     {
       if (is.null(headers) || length(headers) == 0) {
@@ -314,6 +454,12 @@ read_json_wrapper <- function(path, count = 1, headers = NULL) {
           httr2::req_headers,
           c(list(request), as.list(headers))
         )
+        if (!is.null(body)) {
+          request <- httr2::req_body_json(request, body)
+        }
+        if (!identical(toupper(method), "GET")) {
+          request <- httr2::req_method(request, toupper(method))
+        }
         request <- httr2::req_error(request, is_error = function(resp) FALSE)
         response <- httr2::req_perform(request)
         status <- httr2::resp_status(response)
@@ -339,7 +485,13 @@ read_json_wrapper <- function(path, count = 1, headers = NULL) {
     is(output_json, "try-error")
   if (call_failed & count < 16) {
     Sys.sleep(count)
-    output_json <- read_json_wrapper(path, count = count * 2, headers = headers)
+    output_json <- read_json_wrapper(
+      path,
+      count = count * 2,
+      headers = headers,
+      method = method,
+      body = body
+    )
   }
   return(output_json)
 }
@@ -364,7 +516,11 @@ read_json_wrapper <- function(path, count = 1, headers = NULL) {
 #' @export
 #'
 #' @examples
-#' ## Example usage will be added later
+#' dat <- data.frame(
+#'   company = "Statistik Austria",
+#'   address = "Guglgasse 13, 1110 Wien"
+#' )
+#' dat$query <- buildQuery(dat, selectCols = c("company", "address"))
 buildQuery <- function(dat, selectCols = NULL) {
   # check inputs
   if (!inherits(data.table(), c("data.frame", "data.table"))) {

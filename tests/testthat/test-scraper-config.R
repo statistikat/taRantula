@@ -70,8 +70,18 @@ test_that("cfg_googlesearch specific validation works", {
   bcfg <- paramsBraveSearch(path = tempdir())
   expect_equal(bcfg$get("provider"), "brave")
   expect_equal(bcfg$get("credentials$key"), "mybraveAPIKey")
+  expect_null(bcfg$get("blacklisted_urls"))
   expect_silent(bcfg_quiet <- paramsBraveSearch(path = tempdir(), verbose = FALSE))
   expect_equal(bcfg_quiet$get("provider"), "brave")
+  bcfg_blacklist <- paramsBraveSearch(
+    path = tempdir(),
+    blacklisted_urls = c("example.com", "https://spam.test/page"),
+    verbose = FALSE
+  )
+  expect_equal(
+    bcfg_blacklist$get("blacklisted_urls"),
+    c("example.com", "https://spam.test/page")
+  )
 
   # Test enum-like validation for scrape_attributes
   expect_error(gcfg$set("scrape_attributes", "invalid_attr"))
@@ -81,6 +91,7 @@ test_that("cfg_googlesearch specific validation works", {
   # Test integer range
   expect_error(gcfg$set("max_query_rate", -5))
   expect_error(gcfg$set("provider", "bing"))
+  expect_error(gcfg$set("blacklisted_urls", 1))
 })
 
 test_that("YAML export and round-trip loading works", {
