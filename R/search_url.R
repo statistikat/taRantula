@@ -52,6 +52,25 @@
 #'   file = NULL,
 #'   query_col = "query"
 #' )
+#'
+#' Sys.setenv(
+#'   SCRAPING_APIKEY_GOOGLE = "your_google_search_key",
+#'   SCRAPING_ENGINE_GOOGLE = "your_google_search_engine_id"
+#' )
+#'
+#' cfg_google <- paramsGoogleSearch(
+#'   id_col = "id",
+#'   query_col = "query",
+#'   scrape_attributes = c("title", "link", "displayLink", "snippet"),
+#'   verbose = FALSE
+#' )
+#'
+#' google_urls <- searchURL(
+#'   cfg = cfg_google,
+#'   dat = dat,
+#'   file = NULL,
+#'   query_col = "query"
+#' )
 #' }
 searchURL <- function(cfg, dat, file = file, query_col = query_col) {
   position <- NULL
