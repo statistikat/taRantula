@@ -31,10 +31,16 @@
 #'
 #' @examples
 #' runOwiSliceQuery(dry_run = TRUE)
+#' \dontrun{
+#' runOwiSliceQuery(dry_run = FALSE)
+#' # longer running examples
+#' pq_slice <- runOwiSliceQuery(dry_run = FALSE,route = "all:2026-01-01..2026-08-13/collectionName=legal")
+#' }
+#'
+#'
 runOwiSliceQuery <- function(
   route = "all:latest/collectionName=legal",
-  # longer running examples
-  # route = "all:2026-01-01..2026-08-13/collectionName=legal",
+
   url_suffix = "at",
   where = NULL,
   select = c(
