@@ -1,8 +1,8 @@
 #' Search keyword occurrences in OWI parquet output
 #'
 #' @description
-#' Reads OWI parquet files with Arrow and returns rows where `keyword` occurs in
-#' a selected text field. The default field is `main_content`.
+#' Searches OWI parquet files and returns rows where `keyword` occurs in a
+#' selected text field. The default field is `main_content`.
 #'
 #' @param parquet_path Character scalar path, glob, or directory containing
 #'   parquet files, such as the `parquet_path` returned by [runOwiSliceQuery()].
@@ -14,6 +14,9 @@
 #' @param fixed Logical scalar. If `TRUE`, treat `keyword` as literal text.
 #'   Otherwise `keyword` is interpreted as a regular expression.
 #' @param limit Optional integerish scalar limiting the number of returned rows.
+#' @param backend Character scalar. `"duckdb"` queries parquet files directly
+#'   with DuckDB and is usually faster for larger datasets. `"arrow"` keeps the
+#'   previous R-side filtering implementation.
 #' @param as_data_table Logical scalar. If `TRUE`, return a `data.table`;
 #'   otherwise return a `data.frame`.
 #'
@@ -31,6 +34,7 @@ searchOwiParquet <- function(
   ignore_case = TRUE,
   fixed = TRUE,
   limit = NULL,
+  backend = c("duckdb", "arrow"),
   as_data_table = TRUE
 ) {
   assert_scalar_character(parquet_path, "parquet_path")
@@ -40,6 +44,7 @@ searchOwiParquet <- function(
   assert_scalar_logical(ignore_case, "ignore_case")
   assert_scalar_logical(fixed, "fixed")
   assert_null_or_positive_integerish(limit, "limit")
+  backend <- match.arg(backend)
   assert_scalar_logical(as_data_table, "as_data_table")
 
   files <- resolveParquetFiles(parquet_path)
@@ -55,6 +60,48 @@ searchOwiParquet <- function(
   }
   columns <- intersect(columns, names(schema))
 
+  if (identical(backend, "duckdb")) {
+    dat <- searchOwiParquetDuckdb(
+      parquet_path = parquet_path,
+      files = files,
+      keyword = keyword,
+      field = field,
+      select = select,
+      columns = columns,
+      ignore_case = ignore_case,
+      fixed = fixed,
+      limit = limit
+    )
+    if (as_data_table) {
+      return(data.table::as.data.table(dat))
+    }
+    return(as.data.frame(dat))
+  }
+
+  searchOwiParquetArrow(
+    files = files,
+    keyword = keyword,
+    field = field,
+    select = select,
+    columns = columns,
+    ignore_case = ignore_case,
+    fixed = fixed,
+    limit = limit,
+    as_data_table = as_data_table
+  )
+}
+
+searchOwiParquetArrow <- function(
+  files,
+  keyword,
+  field,
+  select,
+  columns,
+  ignore_case,
+  fixed,
+  limit,
+  as_data_table
+) {
   dat <- lapply(files, function(file) {
     file_dat <- arrow::read_parquet(
       file = file,
@@ -91,6 +138,75 @@ searchOwiParquet <- function(
   } else {
     as.data.frame(dat)
   }
+}
+
+searchOwiParquetDuckdb <- function(
+  parquet_path,
+  files,
+  keyword,
+  field,
+  select,
+  columns,
+  ignore_case,
+  fixed,
+  limit
+) {
+  con <- DBI::dbConnect(
+    duckdb::duckdb(shared_home = FALSE),
+    dbdir = ":memory:"
+  )
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+
+  return_columns <- intersect(unique(select), columns)
+  select_sql <- paste(DBI::dbQuoteIdentifier(con, return_columns), collapse = ", ")
+  source_sql <- buildDuckdbParquetSource(con, parquet_path, files)
+  field_sql <- DBI::dbQuoteIdentifier(con, field)
+  keyword_sql <- DBI::dbQuoteString(con, keyword)
+  field_value_sql <- paste0("COALESCE(CAST(", field_sql, " AS VARCHAR), '')")
+
+  if (fixed && ignore_case) {
+    where_sql <- paste0(
+      "strpos(lower(", field_value_sql, "), lower(", keyword_sql, ")) > 0"
+    )
+  } else if (fixed) {
+    where_sql <- paste0("strpos(", field_value_sql, ", ", keyword_sql, ") > 0")
+  } else if (ignore_case) {
+    where_sql <- paste0(
+      "regexp_matches(", field_value_sql, ", ", keyword_sql, ", 'i')"
+    )
+  } else {
+    where_sql <- paste0("regexp_matches(", field_value_sql, ", ", keyword_sql, ")")
+  }
+
+  sql <- paste0(
+    "SELECT ", select_sql,
+    " FROM read_parquet(", source_sql, ")",
+    " WHERE ", where_sql
+  )
+  if (!is.null(limit)) {
+    sql <- paste(sql, "LIMIT", as.integer(limit))
+  }
+
+  data.table::as.data.table(DBI::dbGetQuery(con, sql))
+}
+
+buildDuckdbParquetSource <- function(con, parquet_path, files) {
+  if (dir.exists(parquet_path)) {
+    return(DBI::dbQuoteString(con, file.path(parquet_path, "*.parquet")))
+  }
+  if (hasGlobPattern(parquet_path)) {
+    return(DBI::dbQuoteString(con, parquet_path))
+  }
+  if (length(files) == 1) {
+    return(DBI::dbQuoteString(con, files[[1]]))
+  }
+
+  quoted_files <- DBI::dbQuoteString(con, files)
+  paste0("[", paste(quoted_files, collapse = ", "), "]")
+}
+
+hasGlobPattern <- function(path) {
+  grepl("[*?\\[]", path)
 }
 
 resolveParquetFiles <- function(parquet_path) {

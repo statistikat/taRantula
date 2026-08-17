@@ -197,6 +197,30 @@ test_that("searchOwiParquet supports a custom search field and limit", {
   expect_equal(result$url, "https://b.at/privacy")
 })
 
+test_that("searchOwiParquet keeps the Arrow backend available", {
+  parquet_dir <- tempfile("owi-parquet-")
+  dir.create(parquet_dir)
+  arrow::write_parquet(
+    data.frame(
+      id = c("1", "2"),
+      url = c("https://a.at/impressum", "https://b.at/privacy"),
+      title = c("Impressum", "Privacy"),
+      main_content = c("legal disclosure", "privacy text")
+    ),
+    file.path(parquet_dir, "part-1.parquet")
+  )
+
+  result <- searchOwiParquet(
+    parquet_path = parquet_dir,
+    keyword = "LEGAL",
+    backend = "arrow"
+  )
+
+  expect_s3_class(result, "data.table")
+  expect_equal(nrow(result), 1)
+  expect_equal(result$url, "https://a.at/impressum")
+})
+
 test_that("searchOwiParquet validates inputs and missing files", {
   expect_error(searchOwiParquet("", keyword = "x"), "`parquet_path`")
   expect_error(searchOwiParquet(tempfile(), keyword = "x"), "No parquet files")
