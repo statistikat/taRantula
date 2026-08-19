@@ -11,6 +11,11 @@
 #' @param field Character scalar naming the text field to search.
 #' @param select Character vector of columns to return. Missing columns are
 #'   ignored. The search field is always included for filtering.
+#' @param exclude_domains Optional character vector of domain names to exclude
+#'   from results. Values may be domains or URLs. They are compared against
+#'   OWI's `url_domain` column and, when available, reconstructed
+#'   `url_domain.url_suffix` values after trimming, lower-casing, and removing
+#'   a leading `www.`.
 #' @param ignore_case Logical scalar. If `TRUE`, match case-insensitively.
 #' @param fixed Logical scalar. If `TRUE`, treat `keyword` as literal text.
 #'   Otherwise `keyword` is interpreted as a regular expression.
@@ -29,6 +34,7 @@ searchOwi <- function(
   keyword,
   field = "main_content",
   select = c("id", "url", "title", "url_domain", "url_suffix", "language", "warc_date", field),
+  exclude_domains = NULL,
   ignore_case = TRUE,
   fixed = TRUE,
   limit = NULL,
@@ -38,6 +44,7 @@ searchOwi <- function(
   assert_scalar_character(keyword, "keyword")
   assert_scalar_character(field, "field")
   assert_character_select(select)
+  exclude_domains <- normalizeOwiExcludeDomains(exclude_domains)
   assert_scalar_logical(ignore_case, "ignore_case")
   assert_scalar_logical(fixed, "fixed")
   assert_null_or_positive_integerish(limit, "limit")
@@ -49,10 +56,19 @@ searchOwi <- function(
   }
 
   schema <- arrow::ParquetFileReader$create(files[[1]])$GetSchema()
-  columns <- unique(c(select, field))
+  has_url_suffix <- "url_suffix" %in% names(schema)
+  columns <- unique(c(
+    select,
+    field,
+    if (!is.null(exclude_domains)) "url_domain",
+    if (!is.null(exclude_domains) && has_url_suffix) "url_suffix"
+  ))
   missing_field <- !field %in% names(schema)
   if (missing_field) {
     rlang::abort(glue::glue("Field `{field}` is not present in parquet schema."))
+  }
+  if (!is.null(exclude_domains) && !"url_domain" %in% names(schema)) {
+    rlang::abort("`exclude_domains` requires a `url_domain` column in the parquet schema.")
   }
   columns <- intersect(columns, names(schema))
 
@@ -63,6 +79,7 @@ searchOwi <- function(
     field = field,
     select = select,
     columns = columns,
+    exclude_domains = exclude_domains,
     ignore_case = ignore_case,
     fixed = fixed,
     limit = limit
@@ -80,6 +97,7 @@ searchOwiDuckdb <- function(
   field,
   select,
   columns,
+  exclude_domains,
   ignore_case,
   fixed,
   limit
@@ -109,6 +127,52 @@ searchOwiDuckdb <- function(
     )
   } else {
     where_sql <- paste0("regexp_matches(", field_value_sql, ", ", keyword_sql, ")")
+  }
+  if (!is.null(exclude_domains)) {
+    url_domain_sql <- DBI::dbQuoteIdentifier(con, "url_domain")
+    exclude_sql <- paste(DBI::dbQuoteString(con, exclude_domains), collapse = ", ")
+    domain_value_sql <- paste0(
+      "regexp_replace(lower(COALESCE(CAST(",
+      url_domain_sql,
+      " AS VARCHAR), '')), '^www\\.', '')"
+    )
+    domain_exclusion_sql <- paste0(domain_value_sql, " NOT IN (", exclude_sql, ")")
+    if ("url_suffix" %in% columns) {
+      url_suffix_sql <- DBI::dbQuoteIdentifier(con, "url_suffix")
+      suffix_value_sql <- paste0(
+        "lower(COALESCE(CAST(",
+        url_suffix_sql,
+        " AS VARCHAR), ''))"
+      )
+      full_domain_sql <- paste0(
+        "CASE WHEN ",
+        domain_value_sql,
+        " = '' OR ",
+        suffix_value_sql,
+        " = '' THEN ",
+        domain_value_sql,
+        " ELSE ",
+        domain_value_sql,
+        " || '.' || ",
+        suffix_value_sql,
+        " END"
+      )
+      domain_exclusion_sql <- paste0(
+        "(",
+        domain_exclusion_sql,
+        " AND ",
+        full_domain_sql,
+        " NOT IN (",
+        exclude_sql,
+        "))"
+      )
+    }
+    where_sql <- paste0(
+      "(",
+      where_sql,
+      ") AND ",
+      domain_exclusion_sql
+    )
   }
 
   sql <- paste0(
@@ -148,4 +212,32 @@ resolveParquetFiles <- function(parquet_path) {
   }
   files <- Sys.glob(parquet_path)
   files[file.exists(files) & grepl("\\.parquet$", files)]
+}
+
+normalizeOwiExcludeDomains <- function(exclude_domains) {
+  if (is.null(exclude_domains)) {
+    return(NULL)
+  }
+  if (!is.character(exclude_domains)) {
+    rlang::abort("`exclude_domains` must be a character vector or NULL.")
+  }
+
+  exclude_domains <- vapply(exclude_domains, function(x) {
+    host <- tryCatch(
+      urltools::domain(x),
+      error = function(e) NA_character_
+    )
+    if (is.na(host) || !nzchar(host)) {
+      return(x)
+    }
+    host
+  }, character(1), USE.NAMES = FALSE)
+  exclude_domains <- trimws(tolower(exclude_domains))
+  exclude_domains <- exclude_domains[!is.na(exclude_domains) & nzchar(exclude_domains)]
+  if (length(exclude_domains) == 0) {
+    return(NULL)
+  }
+
+  exclude_domains <- sub("^www\\.", "", exclude_domains)
+  unique(exclude_domains)
 }
