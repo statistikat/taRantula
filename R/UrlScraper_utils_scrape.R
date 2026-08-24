@@ -128,43 +128,6 @@
     return(active)
   }
 
-  # Initialize a Selenium session or prepare request headers
-  .create_sid <- function(cfg, timeout = 30) {
-    if (!isTRUE(cfg$selenium$use_selenium)) {
-      return(c(user_agent = cfg$httr2$user_agent))
-    }
-    tryCatch(
-      expr = {
-        sel_cfg <- cfg$selenium
-        caps <- list(
-          browserName = sel_cfg$browser,
-          pageLoadStrategy = sel_cfg$pageLoadStrategy,
-          timeouts = list(
-            implicit = 5000,
-            pageLoad = 25000,
-            script = 25000
-          )
-        )
-
-        chrome_stuff <- selenium::chrome_options(
-          args = sel_cfg$ecaps$args,
-          prefs = as.list(sel_cfg$ecaps$prefs),
-          excludeSwitches = as.list(sel_cfg$ecaps$excludeSwitches)
-        )
-
-        selenium::SeleniumSession$new(
-          host = sel_cfg$host,
-          port = sel_cfg$port,
-          verbose = sel_cfg$verbose,
-          browser = sel_cfg$browser,
-          capabilities = c(caps, chrome_stuff),
-          timeout = timeout
-        )
-      },
-      error = function(e) NULL
-    )
-  }
-
   # Introduce random delays
   .random_sleep <- function(long = FALSE) {
     if (isTRUE(long)) {
@@ -358,3 +321,43 @@
 
   invisible(TRUE)
 }
+
+
+# Initialize a Selenium session or prepare request headers
+# moved outside to it can be loaded and used
+.create_sid <- function(cfg, timeout = 30) {
+  if (!isTRUE(cfg$selenium$use_selenium)) {
+    return(c(user_agent = cfg$httr2$user_agent))
+  }
+  tryCatch(
+    expr = {
+      sel_cfg <- cfg$selenium
+      caps <- list(
+        browserName = sel_cfg$browser,
+        pageLoadStrategy = sel_cfg$pageLoadStrategy,
+        timeouts = list(
+          implicit = 5000,
+          pageLoad = 25000,
+          script = 25000
+        )
+      )
+      
+      chrome_stuff <- selenium::chrome_options(
+        args = sel_cfg$ecaps$args,
+        prefs = as.list(sel_cfg$ecaps$prefs),
+        excludeSwitches = as.list(sel_cfg$ecaps$excludeSwitches)
+      )
+      
+      selenium::SeleniumSession$new(
+        host = sel_cfg$host,
+        port = sel_cfg$port,
+        verbose = sel_cfg$verbose,
+        browser = sel_cfg$browser,
+        capabilities = c(caps, chrome_stuff),
+        timeout = timeout
+      )
+    },
+    error = function(e) NULL
+  )
+}
+

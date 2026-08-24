@@ -81,10 +81,13 @@ extractLinks <- function(doc, baseurl, keep_links = NULL) {
 
   # Identify all relevant link elements
   body_node <- xml2::xml_find_first(doc, "//body")
-  links <- rvest::html_elements(body_node, "a, area, base, link")
-
+  links <- rvest::html_elements(doc, "a, area, base, link")
   hrefs <- rvest::html_attr(links, "href")
-
+  
+  # make absolute links
+  baseurl_slash <- sub("/+$", "/", baseurl)
+  hrefs <- xml2::url_absolute(hrefs, baseurl_slash)
+  
   # Return an empty data table if no valid links are found
   if (length(hrefs) == 0 || all(is.na(hrefs))) {
     return(data.table::data.table(
