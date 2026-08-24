@@ -23,69 +23,80 @@ Before scraping, you need a running Selenium Grid. Using Docker is the recommend
 
 ### Docker-Compose Setup
 
-Save the following as `docker-compose.yaml` and run `docker-compose up -d`. This configuration is optimized for the memory demands of modern browsers.
+Save the following as `docker-compose.yaml` and run `docker-compose up -d`. This configuration is optimized for the memory demands of modern browsers. Depending on available resources, additional nodes may be added or the number of allowed sessions should be adjusted.
 
 ``` yaml
-version: "3"
 services:
   hub:
-  container_name: selenium-hub
-image: selenium/hub:4.8
-ports:
-  - 4442-4444:4442-4444
-networks:
-  - net-selenium-grid
-environment:
-  - NODE_MAX_INSTANCES=3
-  - NODE_MAX_SESSION=3
+    container_name: selenium-hub
+    image: selenium/hub:4.34.0
+    ports:
+      - 4442-4444:4442-4444
+    networks:
+      - tarantula-network
+    environment:
+      - SE_NODE_SESSION_TIMEOUT=600
+      - SE_SESSION_REQUEST_TIMEOUT=300
+      - SE_NODE_CONNECTION_TIMEOUT=60
+      - SE_NODE_READ_TIMEOUT=60
 
-node-chrome:
-  image: selenium/node-chrome:138.0
-  container_name: selenium-grid-chrome
-  depends_on:
-    - hub
-  networks:
-    - net-selenium-grid
-  environment:
-    - SE_EVENT_BUS_HOST=hub
-    - SE_EVENT_BUS_PUBLISH_PORT=4442
-    - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
-    - SE_NODE_OVERRIDE_MAX_SESSIONS=true
-    - SE_NODE_MAX_SESSIONS=3
-    - SE_ENABLE_BROWSER_LEFTOVERS_CLEANUP=true
-    - SE_BROWSER_LEFTOVERS_INTERVAL_SECS=600
-    - SE_BROWSER_LEFTOVERS_TEMPFILES_DAYS=2
-  shm_size: 2g
+  node-chrome-1:
+    image: selenium/node-chrome:138.0
+    container_name: selenium-grid-chrome-1
+    depends_on:
+      - hub
+    networks:
+      - tarantula-network
+    environment:
+      - SE_EVENT_BUS_HOST=hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_NODE_MAX_SESSIONS=3
+      - SE_ENABLE_BROWSER_LEFTOVERS_CLEANUP=true
+      - SE_BROWSER_LEFTOVERS_INTERVAL_SECS=600
+      - SE_BROWSER_LEFTOVERS_TEMPFILES_DAYS=2
+    shm_size: 2g
+    deploy:
+      resources:
+        limits:
+          cpus: '2.5'
+          memory: 6G
+        reservations:
+          cpus: '0.5'
+          memory: 2G
 
 networks:
-  net-selenium-grid:
+  tarantula-network:
   external: true
 ```
 
-***Note**:* Create the network first if needed: This can be achieved using command `docker network create net-selenium-grid`.
+***Note**:* Create the network first if needed: This can be achieved using command `docker network create tarantula-network`.
 
 ## Basic Workflow
 
 The package contains the following processes: 
     
-- define google custom search parameters via an `R6`-based configuration and run a google custom search.
+- define search parameters via an `R6`-based configuration and run Google Custom Search or Brave Search.
 - define scraping parameters via an `R6`-based configuration and initializing the scraper.
     
 
-## Google custom search    
+## Search URL Candidates
 
 ### Configuration 
 
-Set the following environmental variables:
+For Google Custom Search, set the following environmental variables:
 
   - `SCRAPING_APIKEY_GOOGLE` for the google custom search api key
   - `SCRAPING_ENGINE_GOOGLE` for the google custom search engine ID
 
-Use `paramsGoogleSearch()` to manage settings. This ensures all nested parameters are validated before the google custom search starts.
+For Brave Search, set `SCRAPING_APIKEY_BRAVE` for the Brave Search API key.
 
-### Custom search
+Use `paramsGoogleSearch()` or `paramsBraveSearch()` to manage settings. This ensures all nested parameters are validated before the search starts.
 
-Run google custom search api with a queries build from enterprise name and addresses.
+### Google Custom Search
+
+Run Google Custom Search API with queries built from enterprise name and addresses.
 
 ```{r}
 Sys.setenv(
@@ -118,14 +129,39 @@ cfg$set(key = "file", c("File1.csv", "File2.csv")) # <- files to save results in
 # run google custom search
 runGoogleSearch(
   cfg = cfg,
-  data = data
+  dat = dat
 )
 ```
 
+### Brave Search with a URL blacklist
 
+Brave Search supports URL blacklists through the `blacklisted_urls` setting. The domains or URLs are written to a temporary `.goggle` file and sent to the Brave Search API as Goggles rules.
 
+```{r}
+Sys.setenv(SCRAPING_APIKEY_BRAVE = "My_Brave_ApiKey")
 
-    
+dat <- data.table(
+  id = 1,
+  term = "st-georgen-kreischberg"
+)
+dat[, query := buildQuery(.SD), .SDcols = "term"]
+
+cfg <- paramsBraveSearch(
+  id_col = "id",
+  query_col = "query",
+  blacklisted_urls = "https://www.st-georgen-kreischberg.gv.at/",
+  scrape_attributes = c("title", "link", "displayLink", "snippet"),
+  verbose = FALSE
+)
+
+urls <- searchURL(
+  cfg = cfg,
+  dat = dat,
+  file = NULL,
+  query_col = "query"
+)
+```
+
 ## Scraping
 
 ### Configuration 
@@ -141,6 +177,9 @@ cfg$set("selenium$host", "localhost")
 cfg$set("selenium$workers", 3)
 cfg$set("urls", c("https://nytimes.com", "https://whitehouse.gov"))
 
+# Number of workers for robots.txt detection
+cfg$set("robots$workers", 4)
+
 # Initialize the scraper
 s <- UrlScraper$new(cfg)
 
@@ -148,56 +187,64 @@ s <- UrlScraper$new(cfg)
 s$scrape()
 ```
 
-### Scraping Engines: Selenium vs. httr
+### Scraping Engines: Selenium vs. httr2
 
-The `scrape()` implementation is engine-agnostic. It detects whether the session is a full browser or a set of HTTP headers and adjusts its strategy accordingly.
+The `scrape()` function supports two engines: Selenium for dynamic content and `httr2` for static web requests. By default, the package uses Selenium. You can switch to `httr2` by setting the configuration parameter `cfg$set("selenium$use_selenium", FALSE)`.
 
 #### Selenium Mode (JavaScript Support)
 By default, the scraper expects a **Selenium Grid** to work with. This is necessary for modern websites that require JavaScript to render content.
 
 * **Redirect Detection**: The scraper automatically detects if a URL redirects (e.g., from `http` to `https`) and stores the `url_redirect` pointer in the database.
+
 * **Content Persistence**: The full rendered HTML source is captured after the DOM has stabilized.
 
-#### httr Fallback (High Speed)
-If you disable Selenium, the scraper falls back to `httr::GET()`. This is significantly faster and uses fewer resources but does not allow to catch dynamically rendered content.
+#### httr2 Fallback (High Speed)
+If you disable Selenium, the scraper falls back to `httr2::request()`. This is significantly faster and uses fewer resources but does not allow to catch dynamically rendered content.
 
 * **When to use**: For static sites or APIs where JavaScript rendering is not required.
 * **Custom Headers**: In this mode, the scraper passes your configured user-agent and metadata via HTTP headers.
 
 ```{r engine-toggle}
-# To disable Selenium and use the httr fallback:
+# To disable Selenium and use the httr2 fallback:
 cfg$set("selenium$use_selenium", FALSE)
 
-# The same UrlScraper$new(cfg) will now use httr internally
+# The same UrlScraper$new(cfg) will now use httr2 internally
 ```
-
 
 ### Fault Tolerance and Progress Protection
 
-One of the core strengths of `taRantula` is its resilience. Scraping thousands of URLs is prone to interruptions (network timeouts, hardware crashes, or OS updates).
+One of the core strengths of `taRantula` is its resilience. Scraping thousands of URLs is prone to interruptions, such as network timeouts, hardware crashes, or OS updates.
 
 #### Snapshotting Mechanism
 
 The configuration includes a `snapshot_every` parameter (default is 10).
 
-**How it works:** Every N URLs, each worker writes its current progress to a temporary "snapshot" file in the project directory.
+**How it works:** Every N URLs, each worker writes its current progress to a temporary "snapshot" file in the project directory. Simultaneously, all extracted data is persisted into highly compressed **Parquet files**, ensuring the actual scraped content is saved immediately.
 
-**Crash Recovery:** If the R session or the Selenium server crashes, simply re-initialize the `UrlScraper` with the same configuration. On startup, the class detects these snapshots and the existing DuckDB database.
+**Crash Recovery:** If the `R` session or the Selenium server crashes, simply re-initialize the `UrlScraper` with the same configuration. On startup, the class detects these snapshot files and reconciles them with the existing DuckDB database and Parquet archives.
 
-**Persistence:** Only the URLs processed since the *last* snapshot are lost, ensuring that 99% of your progress is usually preserved.
+**Persistence:** The snapshotting mechanism ensures that only the URLs currently in the buffer are at risk; since all successfully scraped data is written to Parquet files during the operation, a large percentage of the progress is permanently preserved.
 
 ### Data Extraction and Iteration
 
-Data is persisted in `DuckDB`, meaning you can access it via helper methods or raw SQL.
+Data is managed through a hybrid architecture: relational metadata (status, timestamps, and hierarchy) is stored in **DuckDB**, while the raw extracted content (HTML source and discovered link lists) is archived in partitioned **Parquet files**.
+
+The `$results()` method abstracts this complexity by automatically performing an on-the-fly join between the DuckDB metadata and the corresponding Parquet archives. For large datasets, you can toggle the `with_src` parameter to choose between high-performance metadata analysis and full-content extraction.
 
 ```{r extraction}
-# Access results as a data.table
+# By default: Access results as a data.table, including the HTML source code.
+# Note: This performs an on-the-fly join with the Parquet archive.
 results_dt <- s$results()
 
-# Access all discovered links
+# Access metadata only. 
+# This is significantly faster for filtering or summary statistics.
+results_meta <- s$results(with_src = FALSE)
+
+# Access all discovered links; This internally computes 
+# hierarchy levels
 links_dt <- s$links()
 
-# Inspect logs for errors or redirects
+# Inspect execution logs for progress tracking and redirects
 logs_dt <- s$logs()
 ```
 
@@ -225,8 +272,17 @@ You can feed newly discovered links back into the scraper. `taRantula` automatic
 
 ```{r update}
 # Add new URLs and scrape again
-s$update_urls(urls = c("https://google.com", "https://www.statistik.at"))
+s$update_urls(urls = c("https://google.com", "https://www.statistik.at", "https://ec.europa.eu/eurostat"))
 s$scrape()
+```
+
+#### Removing Pending URLs
+
+If you accidentally queued links or want to prune the queue before the next scraping run, you can remove URLs that are still marked as `"todo"`. Any links that have already been scraped or blocked will remain untouched.
+
+```{r remove}
+# Remove specific pending URLs from the queue
+s$remove_urls(urls = c("https://ec.europa.eu/eurostat"))
 ```
 
 #### Graceful Termination

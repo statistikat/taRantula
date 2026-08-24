@@ -198,14 +198,18 @@ params_manager <- R6::R6Class(
     load_config = function(config_file = NULL, ...) {
       default_config <- self$defaults()
       base_config <- default_config
+      init_overrides <- list(...)
+      show_messages <- !identical(init_overrides$verbose, FALSE)
 
       if (!is.null(config_file) && file.exists(config_file)) {
         tryCatch(
           expr = {
             file_config <- private$.yaml_read(config_file)
-            cli::cli_alert_info(
-              text = "Configuration loaded from '{config_file}' for {class(self)[1]}"
-            )
+            if (show_messages) {
+              cli::cli_alert_info(
+                text = "Configuration loaded from '{config_file}' for {class(self)[1]}"
+              )
+            }
             base_config <- utils::modifyList(base_config, file_config)
           },
           error = function(e) {
@@ -217,17 +221,20 @@ params_manager <- R6::R6Class(
           }
         )
       } else if (!is.null(config_file)) {
-        cli::cli_alert_info(
-          text = "Configuration file '{config_file}' not found for '{class(self)[1]}'. Using default configuration."
-        )
+        if (show_messages) {
+          cli::cli_alert_info(
+            text = "Configuration file '{config_file}' not found for '{class(self)[1]}'. Using default configuration."
+          )
+        }
       } else {
-        cli::cli_alert_info(
-          text = "No configuration file provided for '{class(self)[1]}'. Using default configuration."
-        )
+        if (show_messages) {
+          cli::cli_alert_info(
+            text = "No configuration file provided for '{class(self)[1]}'. Using default configuration."
+          )
+        }
       }
 
       # Overwrite with arguments passed to initialize()
-      init_overrides <- list(...)
       allowed_params <- names(base_config)
       class_name <- class(self)[1]
       for (key in names(init_overrides)) {
@@ -399,16 +406,16 @@ params_manager <- R6::R6Class(
   )
 )
 
-#' @title Google Search Configuration Class
+#' @title Search API Configuration Class
 #'
 #' @description
 #' `cfg_googlesearch` is an R6 class that inherits from
 #' [`params_manager`] and provides configuration management for
-#' performing Google Custom Search API queries.
+#' performing Google Custom Search API and Brave Search API queries.
 #'
 #' It handles:
 #'
-#' * Definition of default parameters for Google search jobs
+#' * Definition of default parameters for search jobs
 #' * YAML-based configuration overrides
 #' * Programmatic overrides via `...`
 #' * Validation of all relevant configuration fields
@@ -447,9 +454,13 @@ cfg_googlesearch <- R6::R6Class(
     #'     messages (default: `100`).
     #'   * `save_every_n`: Positive integer. Interval for saving intermediate
     #'     results (default: `500`).
+    #'   * `provider`: Search API provider. One of `"google"` or `"brave"`.
     #'   * `scrape_attributes`: Character vector. Specifies which data to extract
     #'     from results. One or more of: `"title"`, `"link"`, `"displayLink"`,
     #'     `"snippet"` (default: `c("link", "displayLink")`).
+    #'   * `blacklisted_urls`: Character vector of domains or URLs to discard
+    #'     from Brave Search results using a temporary Goggles file. Ignored by
+    #'     Google Search (default: `NULL`).
     #'   * `verbose`: Logical. Should progress updates be printed to the
     #'     console? (default: `TRUE`).
     #'   * `max_queries`: Maximum queries allowed per 24-hour period. If reached,
@@ -462,10 +473,12 @@ cfg_googlesearch <- R6::R6Class(
     #'   * `overwrite`: Logical. If `TRUE`, existing files are overwritten. If `FALSE`,
     #'     existing data are loaded via [data.table::fread()] and new results are
     #'     appended. Ensure column names match when appending (default: `FALSE`).
-    #'   * `credentials`: A named list containing Google API credentials. Use
-    #'     `"key"` or `"SCRAPING_APIKEY_GOOGLE"` for the API Key, and `"engine"`
-    #'     or `"SCRAPING_ENGINE_GOOGLE"` for the Search Engine ID. If omitted,
-    #'     environment variables are used. See also [getGoogleCreds()].
+    #'   * `credentials`: A named list containing search API credentials. For
+    #'     Google, use `"key"` or `"SCRAPING_APIKEY_GOOGLE"` for the API Key,
+    #'     and `"engine"` or `"SCRAPING_ENGINE_GOOGLE"` for the Search Engine ID.
+    #'     For Brave, use `"key"` or `"SCRAPING_APIKEY_BRAVE"` for the API Key.
+    #'     If omitted, environment variables are used. See also [getGoogleCreds()]
+    #'     and [getBraveCreds()].
     #'
     #' @param path Path to the directory where project data are stored.
     #'   Overrides the `path` setting in `config_file`.
@@ -475,17 +488,37 @@ cfg_googlesearch <- R6::R6Class(
     #' @return A configured object of class `cfg_googlesearch`.
     #' @export
     initialize = function(config_file = NULL, path = tempdir(), ...) {
-      .update_google_envvars <- function(creds) {
-        creds <- list(...)$credentials
+      .update_search_envvars <- function(creds, provider = "google") {
         if (is.null(creds) || length(creds) == 0) {
           return(invisible(NULL))
         }
+
+        provider <- tolower(provider)
+        if (!provider %in% c("google", "brave")) {
+          provider <- "google"
+        }
+
         mm <- c(
-          "KEY"                    = "SCRAPING_APIKEY_GOOGLE",
           "SCRAPING_APIKEY_GOOGLE" = "SCRAPING_APIKEY_GOOGLE",
-          "ENGINE"                 = "SCRAPING_ENGINE_GOOGLE",
-          "SCRAPING_ENGINE_GOOGLE" = "SCRAPING_ENGINE_GOOGLE"
+          "SCRAPING_ENGINE_GOOGLE" = "SCRAPING_ENGINE_GOOGLE",
+          "SCRAPING_APIKEY_BRAVE" = "SCRAPING_APIKEY_BRAVE"
         )
+        if (provider == "brave") {
+          mm <- c(
+            "KEY" = "SCRAPING_APIKEY_BRAVE",
+            "BRAVE_KEY" = "SCRAPING_APIKEY_BRAVE",
+            mm
+          )
+        } else {
+          mm <- c(
+            "KEY" = "SCRAPING_APIKEY_GOOGLE",
+            "GOOGLE_KEY" = "SCRAPING_APIKEY_GOOGLE",
+            "ENGINE" = "SCRAPING_ENGINE_GOOGLE",
+            "CX" = "SCRAPING_ENGINE_GOOGLE",
+            "GOOGLE_ENGINE" = "SCRAPING_ENGINE_GOOGLE",
+            mm
+          )
+        }
 
         nn <- toupper(names(creds))
 
@@ -505,11 +538,19 @@ cfg_googlesearch <- R6::R6Class(
         ))
         return(invisible(NULL))
       }
-      .update_google_envvars(creds = list(...)$credentials)
+      provider_arg <- list(...)$provider
+      if (is.null(provider_arg)) {
+        provider_arg <- "google"
+      }
+      .update_search_envvars(creds = list(...)$credentials, provider = provider_arg)
       super$initialize(config_file, ..., path = path)
+
+      provider <- self$get("provider")
+      credentials <- self$get("credentials")
+      self$set("credentials", getSearchCreds(provider = provider, credentials = credentials))
     },
     #' @description
-    #' Return the default configuration settings for Google Custom Search.
+    #' Return the default configuration settings for Search.
     #'
     #' @return A named list containing default values for:
     #' * `path` – directory to store output
@@ -517,16 +558,19 @@ cfg_googlesearch <- R6::R6Class(
     #' * `query_col` – column containing query strings
     #' * `print_every_n` – progress message interval
     #' * `save_every_n` – save interval
-    #' * `scrape_attributes` – which CSE fields to keep
+    #' * `provider` – search API provider
+    #' * `scrape_attributes` – which search result fields to keep
     #' * `verbose` – print progress messages
     #' * `max_queries` – maximum queries per 24h
     #' * `max_query_rate` – queries per 100 seconds
     #' * `file` – output file (or `NULL`)
     #' * `overwrite` – overwrite output file or append
-    #' * `credentials` – list with `key` and `engine`
+    #' * `credentials` – list with provider credentials
+    #' * `blacklisted_urls` – domains or URLs to discard for Brave Search
     defaults = function() {
       list(
         path = NULL,
+        provider = "google",
         id_col = "ID",
         query_col = NULL,
         print_every_n = 100,
@@ -537,7 +581,8 @@ cfg_googlesearch <- R6::R6Class(
         max_query_rate = 100,
         file = NULL,
         overwrite = FALSE,
-        credentials = getGoogleCreds()
+        credentials = list(),
+        blacklisted_urls = NULL
       )
     }
   ),
@@ -548,6 +593,12 @@ cfg_googlesearch <- R6::R6Class(
         super$.req_string(
           x = value,
           nm = key
+        )
+      } else if (key == "provider") {
+        super$.req_string(
+          x = value,
+          nm = key,
+          allowed = c("google", "brave")
         )
       } else if (key == "path") {
         super$.req_path(
@@ -565,7 +616,7 @@ cfg_googlesearch <- R6::R6Class(
           nm = key,
           min_val = 0
         )
-      } else if (key %in% c("file", "query_col")) {
+      } else if (key %in% c("file", "query_col", "blacklisted_urls")) {
         super$.req_charv(
           x = value,
           nm = key,
@@ -577,6 +628,14 @@ cfg_googlesearch <- R6::R6Class(
           nm = key,
           null_allowed = FALSE,
           allowed = c("title", "link", "displayLink", "snippet")
+        )
+      } else if (key == "credentials") {
+        if (is.list(value) && length(value) == 0) {
+          return(invisible(TRUE))
+        }
+        super$.req_named_list(
+          x = value,
+          nm = key
         )
       }
       return(invisible(TRUE))
@@ -607,6 +666,7 @@ cfg_googlesearch <- R6::R6Class(
 #' # Create with overrides
 #' cfg <- paramsGoogleSearch(
 #'   path = getwd(),
+#'   provider = "google",
 #'   credentials = list(
 #'     key = "my_google_apikey",
 #'     engine = "my-search-engine-id"
@@ -638,6 +698,37 @@ paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
   cfg_googlesearch$new(config_file = config_file, path = path, ...)
 }
 
+#' Create a Brave Search configuration object
+#'
+#' This convenience wrapper creates a [cfg_googlesearch] object configured for
+#' the Brave Search API. It reads `SCRAPING_APIKEY_BRAVE` unless credentials are
+#' supplied explicitly.
+#'
+#' @param config_file Optional path to a YAML configuration file.
+#' @param path Path to a directory used for storing downloaded data.
+#'   Defaults to `tempdir()`.
+#' @param ... Additional named configuration overrides.
+#'   For Brave Search, `blacklisted_urls` can be supplied as a character vector
+#'   of domains or URLs. These are written to a temporary `.goggle` file and sent
+#'   to the Brave API as an inline Goggle definition.
+#'
+#' @return A `cfg_googlesearch` object with `provider = "brave"`.
+#' @export
+#' @examples
+#' cfg <- paramsBraveSearch(
+#'   credentials = list(key = "my_brave_apikey"),
+#'   blacklisted_urls = c("example.com", "https://spam.test/page"),
+#'   verbose = FALSE
+#' )
+paramsBraveSearch <- function(config_file = NULL, path = tempdir(), ...) {
+  cfg_googlesearch$new(
+    config_file = config_file,
+    path = path,
+    provider = "brave",
+    ...
+  )
+}
+
 #' @title Scraper Configuration Class
 #'
 #' @description
@@ -646,7 +737,7 @@ paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
 #' parameters for a generic web scraper.
 #'
 #' It is designed for Selenium-based scraping workflows with integrated
-#' `robots.txt` checks and also supports `httr::GET()`-based scraping.
+#' `robots.txt` checks and also supports `httr2::request()`-based scraping.
 #'
 #' @section Main Responsibilities:
 #' * Define and expose sensible **default settings** for scraping projects
@@ -662,7 +753,7 @@ paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
 #' * `base_dir` – Base directory where project-related data are stored
 #' * `urls` – Character vector of URLs to be scraped
 #' * `robots` – List with `robots.txt`-related settings
-#' * `httr` – List of options for `httr::GET()` calls
+#' * `httr2` – List of options for `httr2::request()` calls
 #' * `selenium` – List with Selenium-related configuration
 #'
 #' See `defaults()` for the exact structure and default values.
@@ -707,7 +798,7 @@ cfg_scraper <- R6::R6Class(
     #'     - `workers` (integer): Number of parallel workers for robots checks; default `1`.
     #'     - `robots_user_agent` (character): User agent string for robots queries;
     #'       default `.default_useragent()`.
-    #'   * `httr` (list): Configuration for `httr::GET()`-based requests:
+    #'   * `httr2` (list): Configuration for `httr2::request()`-based requests:
     #'     - `user_agent` (character): User agent string; default `.default_useragent()`.
     #'   * `selenium` (list): Selenium-related configuration:
     #'     - `use_selenium` (logical): Use Selenium? Default `TRUE`.
@@ -755,7 +846,7 @@ cfg_scraper <- R6::R6Class(
           workers = 1L,
           robots_user_agent = .default_useragent()
         ),
-        httr = list(
+        httr2 = list(
           user_agent = .default_useragent() # default user agent
         ),
         selenium = list(
@@ -765,6 +856,7 @@ cfg_scraper <- R6::R6Class(
           verbose = FALSE,
           browser = "chrome",
           user_agent = .default_useragent(),
+          pageLoadStrategy = "eager",
           ecaps = list(
             args = c(
               "--headless",
@@ -775,14 +867,14 @@ cfg_scraper <- R6::R6Class(
               "--disable-infobars",
               "--disk-cache-size=400000000",
               "--disable-browser-side-navigation",
-              "--disable-blink-features",
+              "--disable-blink-features=AutomationControlled",
               "--window-size=1080,1920",
               "--disable-popup-blocking",
-              "--disable-dev-shm-usage",
-              "--lang=de"
+              "--lang=de",
+              "--proxy-server='direct://'",
+              "--proxy-bypass-list=*"
             ),
             prefs = list(
-              PageLoadStrategy = "eager",
               `profile.default_content_settings.popups` = 0L
             ),
             excludeSwitches = c("disable-popup-blocking")
@@ -828,15 +920,15 @@ cfg_scraper <- R6::R6Class(
           x = rob$robots_user_agent,
           nm = "robots$robots_user_agent"
         )
-      } else if (key == "httr") {
-        super$.req_named_list(value, "httr")
+      } else if (key == "httr2") {
+        super$.req_named_list(value, "httr2")
         # Provide defaults if user passes a partial list (for validation)
-        def <- self$defaults()$httr
-        httr_get <- utils::modifyList(def, value)
+        def <- self$defaults()$httr2
+        httr2_get <- utils::modifyList(def, value)
 
         super$.req_string(
-          x = httr_get$user_agent,
-          nm = "httr$user_agent"
+          x = httr2_get$user_agent,
+          nm = "httr2$user_agent"
         )
       } else if (key == "selenium") {
         super$.req_named_list(value, "selenium")
@@ -865,6 +957,13 @@ cfg_scraper <- R6::R6Class(
           x = sel$user_agent,
           nm = "sel$user_agent"
         )
+
+        super$.req_string(
+          x = sel$pageLoadStrategy,
+          nm = "selenium$pageLoadStrategy",
+          allowed = c("normal", "eager", "none")
+        )
+
         # ecaps
         super$.req_named_list(sel$ecaps, "selenium$ecaps")
 

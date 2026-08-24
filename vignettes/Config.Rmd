@@ -15,7 +15,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-The `taRantula` package uses a robust, `R6`-based configuration system for both scraping-jobs as well as Jobs based on Google Custom Search. This ensures that parameters are validated before scraping begins, reducing the risk of runtime errors in long-running parallel jobs.
+The `taRantula` package uses a robust, `R6`-based configuration system for both scraping-jobs as well as jobs based on Google Custom Search or Brave Search. This ensures that parameters are validated before scraping begins, reducing the risk of runtime errors in long-running parallel jobs.
 
 ## The Configuration Hierarchy
 
@@ -62,9 +62,9 @@ cfg$set("robots$check", FALSE)
 
 ------------------------------------------------------------------------
 
-## Using the Configuration for a Google Custom Search
+## Using the Configuration for Search APIs
 
-The Google Search configuration which can be initialized with function `paramsGoogleSearch` is more streamlined, focusing on API limits and result attributes.
+The search configuration can be initialized with `paramsGoogleSearch()` or `paramsBraveSearch()`. Both share API limits and result attribute settings. Brave Search can additionally discard domains or URLs through the `blacklisted_urls` setting, which is converted to a temporary Brave Goggles file when `searchURL()` runs.
 
 ```{r google-init}
 # Set up a Google Search task
@@ -76,6 +76,20 @@ gcfg <- paramsGoogleSearch(
 
 # Current state
 gcfg$show_config()
+```
+
+```{r brave-init}
+# Set up a Brave Search task with a URL blacklist
+bcfg <- paramsBraveSearch(
+  id_col = "id",
+  query_col = "query",
+  blacklisted_urls = "https://www.st-georgen-kreischberg.gv.at/",
+  scrape_attributes = c("title", "link", "displayLink", "snippet"),
+  verbose = FALSE
+)
+
+# Current state
+bcfg$show_config()
 ```
 
 ------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 Package: taRantula
 Title: The taRantula package provides methods and utility-functions to scrape web pages
-Version: 0.1.0
-Date: 2026-01-22
+Version: 0.1.1
+Date: 2026-03-27
 Authors@R: c(person("Johannes", "Gussenbauer", role = c("aut", "cre"),
                      email = "Johannes.Gussenbauer@statistik.gv.at"),
               person("Bernhard", "Meindl", role = "aut",
@@ -12,13 +12,14 @@ Encoding: UTF-8
 LazyData: true
 License: GPL (>= 2)
 Imports: 
+    arrow,
     data.table,
     stringr,
     jsonlite,
     rvest,
     urltools,
     xml2,
-    httr,
+    httr2,
     rlang,
     methods,
     R6,
@@ -32,8 +33,8 @@ Imports:
     progressr,
     selenium,
     glue,
-    robotstxt
-RoxygenNote: 7.3.3
+    robotstxt,
+    pkgload
 Suggests: 
     testthat (>= 3.0.0),
     knitr,
@@ -49,3 +50,4 @@ URL: https://statistikat.github.io/taRantula, https://github.com/statistikat/taR
 BugReports: https://github.com/statistikat/taRantula/issues
 VignetteBuilder: knitr
 Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

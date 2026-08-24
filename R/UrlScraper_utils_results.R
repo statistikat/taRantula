@@ -1,129 +1,99 @@
-#' @title Extract Table Results from DuckDB
+#' Extract table results from DuckDB
 #'
-#' @description
-#' Retrieves records from one of the internal DuckDB tables used by the
-#' `UrlScraper` framework.  
-#' Supported tables include:
-#' * `"results"` – scraped HTML documents  
-#' * `"logs"` – worker progress log entries  
-#' * `"links"` – extracted hyperlinks  
+#' Retrieves records from specified internal DuckDB tables used by the
+#' scraper framework.
 #'
-#' Optional SQL-style filtering is supported (e.g., `"url LIKE 'https://example.com/%'"`).
+#' This function establishes a read-only connection to the database, validates
+#' the requested table, and executes a query. It supports optional SQL-style
+#' filtering via a WHERE clause and converts the output to a data table.
 #'
-#' @details
-#' This helper function:
-#' * Connects to the DuckDB database in **read‑only** mode  
-#' * Validates the requested table name  
-#' * Constructs a `SELECT * FROM <table>` query, optionally with a `WHERE` clause  
-#' * Returns results as a `data.table`  
+#' @param db_file Path to the DuckDB file.
+#' @param tab Character scalar specifying the table to query. Must be one of
+#' "full_results", "results", "logs", "urls", or "links".
+#' @param filter Optional SQL WHERE clause used to subset results.
 #'
-#' If the underlying query fails (often due to malformed filters),
-#' an informative message is printed and `NULL` is returned invisibly.
-#'
-#' @param db_file Path to the DuckDB file created by the scraper.
-#' @param tab Character scalar specifying the table to query.
-#'   Must be one of `"results"`, `"logs"`, or `"links"`.
-#' @param filter Optional SQL `WHERE` clause (without the word `WHERE`) used
-#'   to subset the results.
-#'
-#' @return
-#' A `data.table` containing all rows from the selected table, optionally
-#' filtered.  
-#' Returns `NULL` invisibly if the query fails.
+#' @return A data table containing requested rows. Returns NULL invisibly on failure.
 #'
 #' @keywords internal
-#'
-#' @examples
-#' \dontrun{
-#' ## Extract all scraped results:
-#' .extract_results("results.duckdb", tab = "results")
-#'
-#' ## Extract links from a specific domain:
-#' .extract_results("results.duckdb", tab = "links",
-#'                   filter = "href LIKE 'https://example.com/%'")
-#' }
-.extract_results <- function(db_file, tab = "results", filter) {
-  stopifnot(rlang::is_scalar_character(tab), tab %in% c("results", "logs", "links"))
+#' @noRd
+.extract_results <- function(db_file, tab = "full_results", filter = NULL) {
+  links <- NULL
+  stopifnot(rlang::is_scalar_character(tab),
+    tab %in% c("results", "full_results", "logs", "links", "urls"))
   stopifnot(fs::file_exists(db_file))
 
-  if (!is.null(filter)) {
+  # Construct query based on provided filters
+  if (is.null(filter)) {
+    sql <- glue::glue(sql_queries$select_generic, tab = tab)
+  } else {
     stopifnot(rlang::is_scalar_character(filter))
+    sql <- glue::glue(sql_queries$select_filtered, tab = tab, filter = filter)
   }
 
-  conn <- DBI::dbConnect(
-    drv = duckdb::duckdb(db_file, read_only = TRUE)
-  )
+  conn <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = TRUE))
   on.exit(try(DBI::dbDisconnect(conn, shutdown = TRUE), silent = TRUE))
 
-  sql <- glue::glue("select * from {tab}", tab = tab)
-  if (!is.null(filter)) {
-    sql <- glue::glue(sql, " where {filter}")
-  }
-
+  # Execute query and handle potential errors
   res <- tryCatch(
     expr = data.table::setDT(DBI::dbGetQuery(conn = conn, statement = sql))[],
     error = function(e) e
   )
 
   if (inherits(res, "error")) {
-    cli::cli_alert_danger("DB-Query was not successful (Check your filter?)")
-    cli::cli_alert_info(glue::glue("query: {shQuote(sql)}"))
+    cli::cli_alert_danger("DB-Query failed. Verify table name and filter syntax.")
+    cli::cli_alert_info(glue::glue("Query: {shQuote(sql)}"))
     return(invisible(NULL))
   }
-  return(res)
+
+  # Ensure consistent link column structure
+  if ("links" %in% names(res)) {
+    res[, links := lapply(links, function(x) {
+      if (is.null(x) || (is.data.frame(x) && nrow(x) == 0)) {
+        return(data.table::data.table(href = character(), label = character(),
+          source_url = character(), level = numeric(),
+          scraped_at = as.POSIXct(character())))
+      }
+      if (is.data.frame(x) && !data.table::is.data.table(x)) {
+        return(data.table::as.data.table(x))
+      }
+      return(x)
+    })]
+  }
+  return(res[])
 }
 
-
-#' @title Execute Arbitrary SQL Query on DuckDB
+#' Execute arbitrary SQL query on DuckDB
 #'
-#' @description
-#' Executes a custom SQL query against the DuckDB database used by the scraper.
-#' This function provides maximum flexibility for advanced users who need to
-#' run specialized SQL statements beyond the standard table extractors.
+#' Executes a custom SQL query against the scraper database.
 #'
-#' @details
-#' The function:
-#' * Validates that the DuckDB file exists  
-#' * Executes the provided SQL in **read‑only** mode  
-#' * Converts the result to a `data.table`  
-#' * Returns `NULL` invisibly if the query fails  
-#'
-#' This is a low‑level function intended for power users.  
-#' Users must ensure their SQL queries are syntactically valid.
+#' This low-level function allows for advanced SQL operations beyond standard
+#' table extraction. It handles database connection, query execution, and
+#' conversion to a data table.
 #'
 #' @param db_file Path to the DuckDB database file.
 #' @param query Character scalar containing a valid SQL query.
 #'
-#' @return
-#' A `data.table` containing the retrieved results, or `NULL` invisibly if the query fails.
+#' @return A data table containing the retrieved results. Returns NULL invisibly
+#' on failure.
 #'
 #' @keywords internal
-#'
-#' @examples
-#' \dontrun{
-#' ## List all domains stored in robots table:
-#' .extract_query("results.duckdb", "SELECT domain FROM robots")
-#'
-#' ## Count pages scraped successfully:
-#' .extract_query("results.duckdb",
-#'                "SELECT COUNT(*) FROM results WHERE status = TRUE")
-#' }
+#' @noRd
 .extract_query <- function(db_file, query) {
   stopifnot(fs::file_exists(db_file))
   stopifnot(rlang::is_scalar_character(query))
 
-  conn <- DBI::dbConnect(
-    drv = duckdb::duckdb(db_file, read_only = TRUE)
-  )
+  # Connect to DB
+  conn <- DBI::dbConnect(duckdb::duckdb(db_file, read_only = TRUE))
   on.exit(try(DBI::dbDisconnect(conn, shutdown = TRUE), silent = TRUE))
 
+  # Execute custom query and handle potential errors
   res <- tryCatch(
     expr = data.table::setDT(DBI::dbGetQuery(conn = conn, statement = query))[],
     error = function(e) e
   )
 
   if (inherits(res, "error")) {
-    cli::cli_alert_danger("DB-Query was not successful, check your query")
+    cli::cli_alert_danger("DB-Query failed. Check your syntax.")
     return(invisible(NULL))
   }
   return(res)

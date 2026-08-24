@@ -25,10 +25,13 @@ reference:
     desc: "Defining parameters for Scraping/Search Jobs"
     contents:
       - paramsGoogleSearch
+      - paramsBraveSearch
       - buildQuery
       - runGoogleSearch
       - searchURL
+      - searchOwi
       - getGoogleCreds
+      - getBraveCreds
 
 
 # Configure Articles (Vignettes)

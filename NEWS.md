@@ -1,3 +1,30 @@
+# taRantula 0.2.0
+
+### Main Features
+* **Storage Refactoring**: Moved raw scraping data (source code and link metadata) from the database into `parquet` files under `{project_dir}/data`.
+* **Brave Search Support**: `searchURL()` now supports the Brave Search API via `paramsBraveSearch()` and `SCRAPING_APIKEY_BRAVE`, returning Google-compatible result columns for downstream workflows.
+* **Brave Search URL Blacklists**: `paramsBraveSearch()` now accepts `blacklisted_urls`, writes them to a temporary `.goggle` file, and sends the generated Goggles rules to Brave Search.
+* **OWI Search Interface**: OWI searches the downloaded Parquet files using DuckDB.
+* **Database Schema Changes**:
+    * Added a `urls` table to store all target URLs.
+    * Modified the `results` table to replace raw source code storage with a `file_path` reference to the `parquet` files.
+    * Added a `status` column to track URL states (`"todo"`, `"success"`, `"failed_domain"`, `"failed_scraping"`, and `"blocked"`).
+    * Replaced the static `links` table with a dynamic view aggregating link data from `parquet` files.
+    * Added a `full_results` view that reconstructs the original `results` table structure by joining source code and link data.
+* **Scraping Workflow**: Domain reachability and `robots.txt` validations are now executed during a pre-scraping phase. Workers only process pre-validated `"todo"` URLs, removing redundant checks within parallel processes.
+
+### Interface changes (`UrlScraper`)
+* **`$results()` Method**: Added a `with_src` parameter (defaults to `TRUE`) to choose between the basic `results` table and the `full_results` view. The method now queries the new view and computes hierarchy levels internally.
+* **`$remove_urls()` Method**: Added a new method to delete pending, unscraped URLs from the queue.
+* **Active Bindings**:
+    * Added `$url_info` to return real-time counts of total, successful, pending, and failed URLs.
+    * Added `$urls_todo` to return all pending URLs marked as `"todo"`.
+
+### Internal Quality & Documentation
+* **SQL Management**: Centralized SQL queries into a structured `sql_queries` list.
+* **Documentation**: Simplified Roxygen documentation and internal utility functions.
+
+
 # taRantula 0.1.0
 
 ### Main Features
@@ -11,7 +38,7 @@
 * **R6-based Config System**: Introduced a robust, hierarchical configuration system with strict validation logic.
     * `paramsScraper()`: Dedicated configuration for generic web crawling and JS rendering.
     * `paramsGoogleSearch()`: Tailored configuration for Google Search API interactions including rate-limit management.
-* **Deep Merging**: Configuration methods now support nested path updates (e.g., `cfg$set("selenium$host", ...)`). 
+* **Deep Merging**: Configuration methods now support nested path updates (e.g., `cfg$set("selenium$host", ...)`).
 * **Validation**: Built-in defensive programming with type-checking for integers, booleans, character vectors, and directory paths.
 * **Export/Import functionality**: Added `$export()` and `$write_defaults()` methods to support YAML-based configuration round-trips.
 
