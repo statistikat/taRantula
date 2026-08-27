@@ -50,4 +50,4 @@ URL: https://statistikat.github.io/taRantula, https://github.com/statistikat/taR
 BugReports: https://github.com/statistikat/taRantula/issues
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.0

@@ -46,7 +46,7 @@ test_that("cfg_scraper R6 configuration and validation works", {
   expect_equal(cfg$get("selenium$host"), "remote-hub")
 })
 
-test_that("cfg_googlesearch specific validation works", {
+test_that("cfg_search specific validation works", {
   env1 <- Sys.getenv("SCRAPING_APIKEY_GOOGLE")
   env2 <- Sys.getenv("SCRAPING_ENGINE_GOOGLE")
   env3 <- Sys.getenv("SCRAPING_APIKEY_BRAVE")

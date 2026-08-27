@@ -10,7 +10,7 @@
 #' Google Custom Search requires `SCRAPING_APIKEY_GOOGLE` and
 #' `SCRAPING_ENGINE_GOOGLE`. Brave Search requires `SCRAPING_APIKEY_BRAVE`.
 #'
-#' @param cfg A [`cfg_googlesearch()`] configuration object containing API
+#' @param cfg A [`cfg_search()`] configuration object containing API
 #'   credentials and query-related settings.
 #' @param dat A `data.frame` or `data.table` containing variables from which
 #'   search queries were constructed.
@@ -75,7 +75,7 @@
 searchURL <- function(cfg, dat, file = file, query_col = query_col) {
   position <- NULL
   creds <- cfg$get("credentials")
-  stopifnot(inherits(cfg, "cfg_googlesearch"))
+  stopifnot(inherits(cfg, "cfg_search"))
 
   params <- cfg$show_config()
   provider <- params$provider
@@ -572,9 +572,9 @@ buildQuery <- function(dat, selectCols = NULL) {
 #' @description
 #' Executes one or multiple Google Custom Search API queries derived from a
 #' prepared dataset. Results are saved into the directory structure defined in
-#' the provided [`cfg_googlesearch()`] configuration object.
+#' the provided [`cfg_search()`] configuration object.
 #'
-#' @param cfg A [`cfg_googlesearch()`] configuration object containing all
+#' @param cfg A [`cfg_search()`] with ``provider="google"` configuration object containing all
 #'   required search, credential, and file‑handling settings.
 #' @param dat A `data.table` containing variables referenced in
 #'   `cfg$query_col`. All referenced columns must exist in `dat`.
@@ -587,8 +587,9 @@ buildQuery <- function(dat, selectCols = NULL) {
 #'
 #' @examples
 #' ## Example use will be added in future releases
-runGoogleSearch <- function(cfg = cfg_googlesearch$new(), dat) {
-  stopifnot(inherits(cfg, "cfg_googlesearch"))
+runGoogleSearch <- function(cfg = cfg_search$new(provider = "google"), dat) {
+  stopifnot(inherits(cfg, "cfg_search"))
+  stopifnot(identical(cfg$get("provider"), "google"))
 
   # Set Parameters
   params <- cfg$show_config()
@@ -654,6 +655,9 @@ runGoogleSearch <- function(cfg = cfg_googlesearch$new(), dat) {
 #' Reads Google Custom Search API credentials from environment variables.
 #' This allows secure decoupling of API keys from code.
 #'
+#' @param credentials a named list that allows to override required credential parameters; in the easiest case one can use the
+#' name of the environment variables
+#'
 #' @details
 #' The following environment variables must be defined:
 #' * `SCRAPING_APIKEY_GOOGLE` – Your Google Custom Search API key
@@ -666,9 +670,8 @@ runGoogleSearch <- function(cfg = cfg_googlesearch$new(), dat) {
 #' A named list with elements:
 #' * `engine` – The Google Custom Search Engine ID
 #' * `key` – The API key string
-#'
+
 #' @export
-#'
 #' @examples
 #' ## Example:
 #' Sys.setenv(SCRAPING_APIKEY_GOOGLE = "your_key")
@@ -684,7 +687,7 @@ getGoogleCreds <- function(credentials = list()) {
 #' @description
 #' Reads Brave Search API credentials from the `SCRAPING_APIKEY_BRAVE`
 #' environment variable.
-#'
+#' @inheritParams getGoogleCreds
 #' @return
 #' A named list with element `key`.
 #'

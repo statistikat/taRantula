@@ -2,8 +2,8 @@
 
 export(UrlScraper)
 export(buildQuery)
-export(cfg_googlesearch)
 export(cfg_scraper)
+export(cfg_search)
 export(check_links)
 export(extractLinks)
 export(getBraveCreds)
@@ -18,23 +18,31 @@ export(searchURL)
 import(data.table)
 import(rvest)
 importFrom(R6,R6Class)
-importFrom(httr2,req_headers)
-importFrom(httr2,req_method)
-importFrom(httr2,req_perform)
-importFrom(httr2,request)
-importFrom(httr2,resp_body_string)
+importFrom(httr2,
+  req_headers,
+  req_method,
+  req_perform,
+  request,
+  resp_body_string
+)
 importFrom(methods,is)
 importFrom(pkgload,is_dev_package)
 importFrom(progressr,with_progress)
 importFrom(rlang,"!!!")
 importFrom(robotstxt,robotstxt)
-importFrom(selenium,SeleniumSession)
-importFrom(selenium,chrome_options)
-importFrom(stats,as.formula)
-importFrom(stats,predict)
-importFrom(stats,quantile)
-importFrom(stats,runif)
+importFrom(selenium,
+  SeleniumSession,
+  chrome_options
+)
+importFrom(stats,
+  as.formula,
+  predict,
+  quantile,
+  runif
+)
 importFrom(stringr,str_match_all)
-importFrom(utils,head)
-importFrom(utils,installed.packages)
-importFrom(utils,tail)
+importFrom(utils,
+  head,
+  installed.packages,
+  tail
+)

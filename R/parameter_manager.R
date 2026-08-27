@@ -409,7 +409,7 @@ params_manager <- R6::R6Class(
 #' @title Search API Configuration Class
 #'
 #' @description
-#' `cfg_googlesearch` is an R6 class that inherits from
+#' `cfg_search` is an R6 class that inherits from
 #' [`params_manager`] and provides configuration management for
 #' performing Google Custom Search API and Brave Search API queries.
 #'
@@ -432,12 +432,12 @@ params_manager <- R6::R6Class(
 #' @format An `R6::R6Class` generator object.
 #' @rdname paramsGoogleSearch
 #' @export
-cfg_googlesearch <- R6::R6Class(
-  classname = "cfg_googlesearch",
+cfg_search <- R6::R6Class(
+  classname = "cfg_search",
   inherit = params_manager,
   public = list(
     #' @description
-    #' Initialize a new `cfg_googlesearch` configuration object.
+    #' Initialize a new `cfg_search` configuration object.
     #'
     #' The load precedence is:
     #' 1. Defaults
@@ -485,7 +485,7 @@ cfg_googlesearch <- R6::R6Class(
     #' @param ... Named arguments used to override specific configuration settings.
     #'   These take precedence over both `config_file` and default values.
     #'
-    #' @return A configured object of class `cfg_googlesearch`.
+    #' @return A configured object of class `cfg_search`.
     #' @export
     initialize = function(config_file = NULL, path = tempdir(), ...) {
       .update_search_envvars <- function(creds, provider = "google") {
@@ -643,9 +643,9 @@ cfg_googlesearch <- R6::R6Class(
   )
 )
 
-#' Create a [cfg_googlesearch] configuration object
+#' Create a [cfg_search] configuration object
 #'
-#' This utility function simplifies the creation of a [cfg_googlesearch] object.
+#' This utility function simplifies the creation of a [cfg_search] object.
 #' It supports optional configuration file loading and programmatic overrides.
 #'
 #' @param config_file Optional path to a YAML configuration file.
@@ -654,7 +654,7 @@ cfg_googlesearch <- R6::R6Class(
 #' @param ... Additional named configuration overrides.
 #'   These take precedence over defaults and YAML configuration.
 #'
-#' @return A `cfg_googlesearch` object.
+#' @return A `cfg_search` object with `provider = "google"`.
 #' @export
 #' @rdname paramsGoogleSearch
 #' @examples
@@ -695,12 +695,17 @@ cfg_googlesearch <- R6::R6Class(
 #' cfg$set("max_query_rate", 200)
 #' cfg$get("max_query_rate")
 paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
-  cfg_googlesearch$new(config_file = config_file, path = path, ...)
+  cfg_search$new(
+    config_file = config_file,
+    path = path,
+    provider = "google",
+    ...
+  )
 }
 
 #' Create a Brave Search configuration object
 #'
-#' This convenience wrapper creates a [cfg_googlesearch] object configured for
+#' This convenience wrapper creates a [cfg_search] object configured for
 #' the Brave Search API. It reads `SCRAPING_APIKEY_BRAVE` unless credentials are
 #' supplied explicitly.
 #'
@@ -712,7 +717,7 @@ paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
 #'   of domains or URLs. These are written to a temporary `.goggle` file and sent
 #'   to the Brave API as an inline Goggle definition.
 #'
-#' @return A `cfg_googlesearch` object with `provider = "brave"`.
+#' @return A `cfg_search` object with `provider = "brave"`.
 #' @export
 #' @examples
 #' cfg <- paramsBraveSearch(
@@ -721,7 +726,7 @@ paramsGoogleSearch <- function(config_file = NULL, path = tempdir(), ...) {
 #'   verbose = FALSE
 #' )
 paramsBraveSearch <- function(config_file = NULL, path = tempdir(), ...) {
-  cfg_googlesearch$new(
+  cfg_search$new(
     config_file = config_file,
     path = path,
     provider = "brave",
