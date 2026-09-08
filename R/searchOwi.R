@@ -5,8 +5,9 @@
 #' selected text field. The default field is `main_content`. Parquet files are
 #' queried directly with DuckDB.
 #'
-#' @param parquet_path Character scalar path, glob, or directory containing
-#'   parquet files, such as the `parquet_path` returned by [runOwiSliceQuery()].
+#' @param parquet_path Character scalar path, or directory containing
+#'   parquet files, such as the `parquet_path` returned by [runOwiSliceQuery()]
+#' or a duckdb connection object.
 #' @param keyword Character scalar to search for.
 #' @param field Character scalar naming the text field to search.
 #' @param select Character vector of columns to return. Missing columns are
@@ -33,14 +34,22 @@ searchOwi <- function(
   parquet_path,
   keyword,
   field = "main_content",
-  select = c("id", "url", "title", "url_domain", "url_suffix", "language", "warc_date", field),
+  select = c(
+    "id",
+    "url",
+    "title",
+    "url_domain",
+    "url_suffix",
+    "language",
+    "warc_date",
+    field
+  ),
   exclude_domains = NULL,
   ignore_case = TRUE,
   fixed = TRUE,
   limit = NULL,
   as_data_table = TRUE
 ) {
-  assert_scalar_character(parquet_path, "parquet_path")
   assert_scalar_character(keyword, "keyword")
   assert_scalar_character(field, "field")
   assert_character_select(select)
@@ -49,10 +58,16 @@ searchOwi <- function(
   assert_scalar_logical(fixed, "fixed")
   assert_null_or_positive_integerish(limit, "limit")
   assert_scalar_logical(as_data_table, "as_data_table")
-
-  files <- resolveParquetFiles(parquet_path)
-  if (length(files) == 0) {
-    rlang::abort(glue::glue("No parquet files found for `parquet_path`: {parquet_path}"))
+  if (inherits(parquet_path, "duckdb_connection")) {
+    message("The provided duckdb connection is used.")
+  } else {
+    assert_scalar_character(parquet_path, "parquet_path")
+    files <- resolveParquetFiles(parquet_path)
+    if (length(files) == 0) {
+      rlang::abort(glue::glue(
+        "No parquet files found for `parquet_path`: {parquet_path}"
+      ))
+    }
   }
 
   schema <- arrow::ParquetFileReader$create(files[[1]])$GetSchema()
@@ -65,10 +80,14 @@ searchOwi <- function(
   ))
   missing_field <- !field %in% names(schema)
   if (missing_field) {
-    rlang::abort(glue::glue("Field `{field}` is not present in parquet schema."))
+    rlang::abort(glue::glue(
+      "Field `{field}` is not present in parquet schema."
+    ))
   }
   if (!is.null(exclude_domains) && !"url_domain" %in% names(schema)) {
-    rlang::abort("`exclude_domains` requires a `url_domain` column in the parquet schema.")
+    rlang::abort(
+      "`exclude_domains` requires a `url_domain` column in the parquet schema."
+    )
   }
   columns <- intersect(columns, names(schema))
 
@@ -102,14 +121,21 @@ searchOwiDuckdb <- function(
   fixed,
   limit
 ) {
-  con <- DBI::dbConnect(
-    duckdb::duckdb(shared_home = FALSE),
-    dbdir = ":memory:"
-  )
-  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  if (inherits(parquet_path, "duckdb_connection")) {
+    message("The provided duckdb connection is used.")
+  } else {
+    con <- DBI::dbConnect(
+      duckdb::duckdb(shared_home = FALSE),
+      dbdir = ":memory:"
+    )
+    on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  }
 
   return_columns <- intersect(unique(select), columns)
-  select_sql <- paste(DBI::dbQuoteIdentifier(con, return_columns), collapse = ", ")
+  select_sql <- paste(
+    DBI::dbQuoteIdentifier(con, return_columns),
+    collapse = ", "
+  )
   source_sql <- buildDuckdbParquetSource(con, parquet_path, files)
   field_sql <- DBI::dbQuoteIdentifier(con, field)
   keyword_sql <- DBI::dbQuoteString(con, keyword)
@@ -117,26 +143,48 @@ searchOwiDuckdb <- function(
 
   if (fixed && ignore_case) {
     where_sql <- paste0(
-      "strpos(lower(", field_value_sql, "), lower(", keyword_sql, ")) > 0"
+      "strpos(lower(",
+      field_value_sql,
+      "), lower(",
+      keyword_sql,
+      ")) > 0"
     )
   } else if (fixed) {
     where_sql <- paste0("strpos(", field_value_sql, ", ", keyword_sql, ") > 0")
   } else if (ignore_case) {
     where_sql <- paste0(
-      "regexp_matches(", field_value_sql, ", ", keyword_sql, ", 'i')"
+      "regexp_matches(",
+      field_value_sql,
+      ", ",
+      keyword_sql,
+      ", 'i')"
     )
   } else {
-    where_sql <- paste0("regexp_matches(", field_value_sql, ", ", keyword_sql, ")")
+    where_sql <- paste0(
+      "regexp_matches(",
+      field_value_sql,
+      ", ",
+      keyword_sql,
+      ")"
+    )
   }
   if (!is.null(exclude_domains)) {
     url_domain_sql <- DBI::dbQuoteIdentifier(con, "url_domain")
-    exclude_sql <- paste(DBI::dbQuoteString(con, exclude_domains), collapse = ", ")
+    exclude_sql <- paste(
+      DBI::dbQuoteString(con, exclude_domains),
+      collapse = ", "
+    )
     domain_value_sql <- paste0(
       "regexp_replace(lower(COALESCE(CAST(",
       url_domain_sql,
       " AS VARCHAR), '')), '^www\\.', '')"
     )
-    domain_exclusion_sql <- paste0(domain_value_sql, " NOT IN (", exclude_sql, ")")
+    domain_exclusion_sql <- paste0(
+      domain_value_sql,
+      " NOT IN (",
+      exclude_sql,
+      ")"
+    )
     if ("url_suffix" %in% columns) {
       url_suffix_sql <- DBI::dbQuoteIdentifier(con, "url_suffix")
       suffix_value_sql <- paste0(
@@ -176,9 +224,13 @@ searchOwiDuckdb <- function(
   }
 
   sql <- paste0(
-    "SELECT ", select_sql,
-    " FROM read_parquet(", source_sql, ")",
-    " WHERE ", where_sql
+    "SELECT ",
+    select_sql,
+    " FROM read_parquet(",
+    source_sql,
+    ")",
+    " WHERE ",
+    where_sql
   )
   if (!is.null(limit)) {
     sql <- paste(sql, "LIMIT", as.integer(limit))
@@ -222,18 +274,25 @@ normalizeOwiExcludeDomains <- function(exclude_domains) {
     rlang::abort("`exclude_domains` must be a character vector or NULL.")
   }
 
-  exclude_domains <- vapply(exclude_domains, function(x) {
-    host <- tryCatch(
-      urltools::domain(x),
-      error = function(e) NA_character_
-    )
-    if (is.na(host) || !nzchar(host)) {
-      return(x)
-    }
-    host
-  }, character(1), USE.NAMES = FALSE)
+  exclude_domains <- vapply(
+    exclude_domains,
+    function(x) {
+      host <- tryCatch(
+        urltools::domain(x),
+        error = function(e) NA_character_
+      )
+      if (is.na(host) || !nzchar(host)) {
+        return(x)
+      }
+      host
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
   exclude_domains <- trimws(tolower(exclude_domains))
-  exclude_domains <- exclude_domains[!is.na(exclude_domains) & nzchar(exclude_domains)]
+  exclude_domains <- exclude_domains[
+    !is.na(exclude_domains) & nzchar(exclude_domains)
+  ]
   if (length(exclude_domains) == 0) {
     return(NULL)
   }
