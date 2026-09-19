@@ -5,7 +5,9 @@ Date: 2026-03-27
 Authors@R: c(person("Johannes", "Gussenbauer", role = c("aut", "cre"),
                      email = "Johannes.Gussenbauer@statistik.gv.at"),
               person("Bernhard", "Meindl", role = "aut",
-                     email = "Bernhard.Meindl@statistik.gv.at"))
+                     email = "Bernhard.Meindl@statistik.gv.at"),
+              person("Alexander", "Kowarik", role = c("aut"),
+              email = "alexander.kowarik@statistik.gv.at", comment=c(ORCID="0000-0001-8598-4130")))
 Description: The taRantula Package provides functions to scrape web pages. A
   lot of options can be set.
 Encoding: UTF-8
